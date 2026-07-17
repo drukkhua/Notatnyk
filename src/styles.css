@@ -96,10 +96,25 @@ body{
 body.col-resizing{cursor:col-resize;user-select:none;}
 .toolbar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);
   background:var(--paper-2);}
-.tb-btn{padding:3px 8px;border:1px solid var(--line-2);border-radius:8px;background:var(--paper);
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;min-height:26px;
+  padding:3px 8px;border:1px solid var(--line-2);border-radius:8px;background:var(--paper);
   color:var(--ink);cursor:pointer;font-size:12px;line-height:1.4;
   font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
 .tb-btn:hover{background:var(--sum-bg);border-color:var(--sum-line);}
+/* Синтаксис кнопки действует в текущей строке/позиции — кнопка «включена» */
+.tb-btn.active{background:var(--sum-bg);border-color:var(--sum-line);color:var(--check);}
+.tb-btn svg{display:block;width:15px;height:15px;}   /* иконки — как у кнопок шапки */
+.tb-sep{width:1px;align-self:stretch;margin:3px 2px;background:var(--line-2);}
+/* Кнопка с подменю (H1/H2/H3): на ховер-устройствах меню по наведению,
+   на таче — по тапу (класс .open ставит JS). Прозрачный padding-top у .tb-menu —
+   «мостик», чтобы ховер не срывался в зазоре между кнопкой и меню. */
+.tb-group{position:relative;display:inline-flex;}
+.tb-menu{position:absolute;left:0;top:100%;padding-top:4px;display:none;z-index:30;
+  width:max-content;}  /* не зажимать по ширине кнопки-родителя, иначе лейблы переносятся */
+.tb-group.open .tb-menu{display:block;}
+@media (hover:hover){ .tb-group:hover .tb-menu{display:block;} }
+.tb-menu-box{display:flex;gap:3px;padding:3px;background:var(--paper);
+  border:1px solid var(--line-2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);}
 /* Источник: колонка номеров + textarea на общем фоне --src-bg */
 .editor-body{flex:1;display:flex;min-height:0;background:var(--src-bg);}
 .gutter{flex:none;overflow:hidden;padding:18px 0;user-select:none;}
@@ -116,8 +131,7 @@ body.col-resizing{cursor:col-resize;user-select:none;}
 /* blocks */
 .r-h1{font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.01em;color:var(--check);}
 .r-h2{font-size:16px;font-weight:700;margin:14px 0 6px;}
-.r-h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-  color:var(--ink-soft);margin:12px 0 5px;}
+.r-h3{font-size:13.5px;font-weight:700;color:var(--ink-soft);margin:12px 0 5px;}
 .r-num{font-size:14px;font-weight:700;margin:3px 0;}
 .r-li{color:var(--ink-soft);margin:3px 0 3px 18px;position:relative;font-size:13.5px;line-height:1.55;}
 .r-li::before{content:"•";position:absolute;left:-14px;color:var(--line-2);font-weight:700;}

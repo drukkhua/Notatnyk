@@ -410,59 +410,183 @@ async function deleteCurrent(){
   select(currentId);
 }
 
+// Иконки тулбара — инлайн-SVG из набора Lucide (MIT, lucide.dev), тот же стиль,
+// что у кнопок шапки («Папка», шестерёнка, «Тема»): 24×24, stroke=2, currentColor.
+const tbIcon = p => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+  + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+const TBI = {
+  head:      tbIcon('<path d="M6 12h12"/><path d="M6 20V4"/><path d="M18 20V4"/>'),          // heading
+  check:     tbIcon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>'), // square-check
+  listNum:   tbIcon('<path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/>'
+                  + '<path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>'),       // list-ordered
+  list:      tbIcon('<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/>'
+                  + '<path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>'),          // list
+  callout:   tbIcon('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+                  + '<path d="M12 9v4"/><path d="M12 17h.01"/>'),                            // triangle-alert
+  quote:     tbIcon('<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2'
+                  + ' 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>'
+                  + '<path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2'
+                  + ' 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>'),    // quote
+  hrThin:    tbIcon('<path d="M5 12h14"/>'),                                                 // minus
+  table:     tbIcon('<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/>'
+                  + '<path d="M3 9h18"/><path d="M3 15h18"/>'),                              // table
+  hideLine:  tbIcon('<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696'
+                  + ' 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>'
+                  + '<path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696'
+                  + ' 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>'),              // eye-off
+  hideBlock: tbIcon('<path d="m15 18-.722-3.25"/><path d="M2 8a10.645 10.645 0 0 0 20 0"/>'
+                  + '<path d="m20 15-1.726-2.05"/><path d="m4 15 1.726-2.05"/><path d="m9 18 .722-3.25"/>'), // eye-closed
+  bold:      tbIcon('<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>'), // bold
+  italic:    tbIcon('<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/>'
+                  + '<line x1="15" x2="9" y1="4" y2="20"/>'),                                // italic
+  strike:    tbIcon('<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/>'
+                  + '<line x1="4" x2="20" y1="12" y2="12"/>'),                               // strikethrough
+  mark:      tbIcon('<path d="m9 11-6 6v3h9l3-3"/>'
+                  + '<path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>'), // highlighter
+  date:      tbIcon('<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/>'
+                  + '<path d="M3 10h18"/>'),                                                 // calendar
+  dateTime:  tbIcon('<path d="M16 14v2.2l1.6 1"/><path d="M16 2v4"/>'
+                  + '<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5.25"/>'
+                  + '<path d="M3 10h18"/><circle cx="16" cy="16" r="6"/>'),                  // calendar-clock
+  variable:  tbIcon('<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/>'
+                  + '<line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>'), // variable
+  calc:      tbIcon('<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/>'
+                  + '<line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/>'
+                  + '<path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/>'
+                  + '<path d="M12 18h.01"/><path d="M8 18h.01"/>'),                          // calculator
+};
+
 // --- подсказки синтаксиса (тулбар + шпаргалка) ---
 // Список строится под текущий язык и ключевые слова. head — заголовок группы
-// (только в шпаргалке). btn+ins — кнопка вставки. table:true — открывает диалог
-// размера таблицы. Запись без btn — только в шпаргалке.
+// (в шпаргалке — секция, в тулбаре — разделитель). btn+ins — кнопка вставки;
+// ico — иконка кнопки (без ico кнопка текстовая: ключевые слова валюты/единиц
+// видны как есть). table:true — открывает диалог размера таблицы.
+// Запись без btn — только в шпаргалке.
 function buildSyntax(){
   const cur = LOCALE.currency, unit = LOCALE.unit, tot = LOCALE.total;
   const exDate = dateStr(false), exDateTime = dateStr(true);
   return [
+    // Порядок — смысловыми рядами, как пишется заметка:
+    // структура: заголовок → списки → цитата/таблица/выноска → линии → скрытие;
+    // инлайн: начертания → дата; деньги: переменная → расчёт → цены → итог → тираж.
     { head: t('grpStruct') },
-    { btn:'#',       ins:'# ',      w:'# / ## / ###', g:t('sHead') },
-    { btn:'☐',       ins:'[ ] ',    w:'[ ] / [x]',    g:t('sCheck', { done: LOCALE.done }) },
-    { btn:'1.',      ins:'1. ',     w:'1.',           g:t('sNum') },
-    { btn:'•',       ins:'- ',      w:'- / *',        g:t('sList') },
-    { btn:'!',       ins:'! ',      w:'! / !!',       g:t('sCallout') },
-    { btn:'❝',       ins:'> \n> @', w:`> … / > @${LOCALE.client}`, g:t('sQuote') },
-    { btn:'—',       ins:'---\n',   w:'---',          g:t('sHrThin') },
-    { btn:'≡',       ins:'===\n',   w:'===',          g:t('sHrBold') },
-    { btn:'▦',       table:true,    w:'| A | B |',    g:t('sTable') },
-    { btn:'//',      ins:'// ',     w:'// …',         g:t('sHide') },
-    { btn:'/* */',   ins:'/*\n\n*/\n', w:'/* … */',    g:t('sHideBlock') },
+    { ico:'head',    line:'# ',  cls:'head', on:/^#{1,3}\s/, w:'# / ## / ###', g:t('sHead'),
+      menu:[['H1','# '],['H2','## '],['H3','### ']] },
+    { ico:'list',    line:'- ',  cls:'list', on:/^[-*]\s/,   w:'- / *',        g:t('sList') },
+    { ico:'listNum', line:'1. ', cls:'list', on:/^\d+\.\s/,  w:'1.',           g:t('sNum') },
+    { ico:'check',   line:'[ ] ', cls:'list', on:/^\[[ xX]\]\s/, w:'[ ] / [x]', g:t('sCheck', { done: LOCALE.done }) },
+    { ico:'quote',   line:'> ',  cls:'quote', on:/^>\s?/, w:`> … / > @${LOCALE.client}`, g:t('sQuote') },
+    { ico:'table',   table:true,    w:'| A | B |',    g:t('sTable') },
+    { ico:'callout', line:'! ',  cls:'callout', on:/^!{1,2}\s/, w:'! / !!',    g:t('sCallout'),
+      menu:[['!','! '],['!!','!! ']] },
+    { ico:'hrThin',  block:'---\n', w:'---',          g:t('sHrThin'),
+      menu:[['—','---\n'],['≡','===\n']] },
+    {                               w:'===',          g:t('sHrBold') },
+    { ico:'hideLine',  line:'// ', cls:'hide', on:/^\/\//, w:'// …',           g:t('sHide') },
+    { ico:'hideBlock', hideBlock:true, w:'/* … */',  g:t('sHideBlock') },
 
     { head: t('grpInline') },
-    { btn:'**b**',   ins:`**${t('exBold')}**`,   w:'**…**',   g:t('sBold') },
-    { btn:'*i*',     ins:`*${t('exItalic')}*`,   w:'*…*',     g:t('sItalic') },
-    { btn:'~~s~~',   ins:`~~${t('exStrike')}~~`, w:'~~…~~',   g:t('sStrike') },
-    { btn:'==H==',   ins:`==${t('exMark')}==`,   w:'== … ==', g:t('sMark') },
+    { ico:'bold',    wrap:'**', ph:t('exBold'),   w:'**…**',   g:t('sBold') },
+    { ico:'italic',  wrap:'*',  ph:t('exItalic'), w:'*…*',     g:t('sItalic') },
+    { ico:'strike',  wrap:'~~', ph:t('exStrike'), w:'~~…~~',   g:t('sStrike') },
+    { ico:'mark',    wrap:'==', ph:t('exMark'),   w:'== … ==', g:t('sMark') },
     {                w:'https://…', g:t('sLink') },
-    { btn:'[date]',      ins:'[date]',      w:`[date] → ${exDate}`, g:t('sDate', { date: exDate }) },
-    { btn:'[date:time]', ins:'[date:time]', w:'[date:time]',        g:t('sDateTime', { datetime: exDateTime }) },
+    { ico:'date',     ins:'[date]',      w:`[date] → ${exDate}`, g:t('sDate', { date: exDate }) },
+    { ico:'dateTime', ins:'[date:time]', w:'[date:time]',        g:t('sDateTime', { datetime: exDateTime }) },
 
     { head: t('grpMoney') },
-    { btn:`[${t('exVar')}]=`, ins:`[${t('exVar')}] = `, w:`[${t('exVar')}] = 1125`,  g:t('sVar') },
+    { ico:'variable',       block:`[${t('exVar')}] = `, sel:t('exVar'),
+                            w:`[${t('exVar')}] = 1125`,                           g:t('sVar') },
     {                       w:`… [${t('exVar')}] …`,                                g:t('sVarRef') },
-    { btn:`= ${cur}`,       ins:`= 0 ${cur}`,       w:`= 12 450 ${cur}`,          g:t('sPrice') },
-    {                       w:`2490 ${cur} / - 2490 ${cur}`,                      g:t('sPriceOther') },
-    { btn:`${cur}/${unit}`, ins:` ${cur}/${unit}`,  w:`${cur}/${unit}`,           g:t('sPerUnit') },
-    { btn:'123=',           ins:'2*3=',             w:'55*3+(2.5+3.5)*2=',        g:t('sCalc') },
+    { ico:'calc',           ins:'2*3=', sel:'2*3',      w:'55*3+(2.5+3.5)*2=',    g:t('sCalc') },
     {                       w:`18400/1200*1125= ${cur}`,                          g:t('sCalcPrice') },
-    { btn:tot,              ins:`${tot}  ${cur}`,   w:`${tot}: N ${cur}`,         g:t('sTotal') },
-    { btn:`[${unit}]`,      ins:`[4000 ${unit}]`,   w:`[4000 ${unit}]`,           g:t('sQtyUnit', { total: tot }) },
+    { btn:`= ${cur}`,       ins:`= 0 ${cur}`, sel:'0',  w:`= 12 450 ${cur}`,      g:t('sPrice') },
+    {                       w:`2490 ${cur} / - 2490 ${cur}`,                      g:t('sPriceOther') },
+    { btn:`${cur}/${unit}`, ins:` ${cur}/${unit}`,      w:`${cur}/${unit}`,       g:t('sPerUnit') },
+    { btn:tot,              block:`${tot}  ${cur}`, caret:` ${cur}`,
+                            w:`${tot}: N ${cur}`,                                 g:t('sTotal') },
+    { btn:`[${unit}]`,      ins:`[4000 ${unit}]`, sel:'4000', w:`[4000 ${unit}]`, g:t('sQtyUnit', { total: tot }) },
   ];
 }
 
 function buildToolbar(){
   toolbar.innerHTML = '';
+  tbState = [];                                   // кнопки с подсветкой состояния — заново
+  let empty = true;                               // ещё не добавили ни одной кнопки
   for(const it of buildSyntax()){
-    if(!it.btn) continue;                         // группы и справочные записи — без кнопки
+    if(it.head){                                  // граница группы — тонкий разделитель
+      if(!empty) toolbar.appendChild(Object.assign(document.createElement('span'), { className:'tb-sep' }));
+      continue;
+    }
+    if(!it.btn && !it.ico) continue;              // справочные записи — без кнопки
     const b = document.createElement('button');
-    b.className = 'tb-btn'; b.textContent = it.btn; b.title = it.g;
-    b.onclick = it.table ? openTableDlg : () => insertAtCursor(it.ins);
+    b.className = 'tb-btn';
+    b.title = it.w ? `${it.g}  ·  ${it.w}` : it.g;  // в тултипе — и что делает, и синтаксис
+    if(it.ico && TBI[it.ico]) b.innerHTML = TBI[it.ico];
+    else b.textContent = it.btn;
+    // mousedown не отдаём кнопке: фокус и выделение остаются в редакторе
+    // (и на мобилке не прячется клавиатура)
+    b.onmousedown = e => e.preventDefault();
+    if(it.on || it.wrap || it.hideBlock) tbState.push({ b, it });
+    // Кнопка с подменю (menu: [[метка, вставка], …]). Десктоп: варианты по ховеру,
+    // клик по самой кнопке — вставка по умолчанию. Тач (hover нет): клик открывает меню.
+    if(it.menu){
+      const g = document.createElement('span'); g.className = 'tb-group';
+      const wrap = document.createElement('span'); wrap.className = 'tb-menu';
+      const box = document.createElement('span'); box.className = 'tb-menu-box';
+      for(const [lbl, ins] of it.menu){
+        const mb = document.createElement('button');
+        mb.className = 'tb-btn'; mb.textContent = lbl;
+        mb.onmousedown = e => e.preventDefault();
+        mb.onclick = e => { e.stopPropagation(); g.classList.remove('open'); runInsert(it, ins); };
+        box.appendChild(mb);
+      }
+      b.onclick = () => {
+        if(matchMedia('(hover: hover)').matches) runInsert(it);
+        else g.classList.toggle('open');
+      };
+      wrap.appendChild(box); g.appendChild(b); g.appendChild(wrap);
+      toolbar.appendChild(g); empty = false;
+      continue;
+    }
+    b.onclick = it.table ? openTableDlg : () => runInsert(it);
     toolbar.appendChild(b);
+    empty = false;
+  }
+  updateToolbarState();
+}
+
+// --- подсветка «активных» кнопок: их синтаксис уже действует там, где курсор ---
+let tbState = [];                     // [{b, it}] — кнопки со считываемым состоянием
+function countOcc(s, sub){ let c = 0, i = 0; while((i = s.indexOf(sub, i)) !== -1){ c++; i += sub.length; } return c; }
+function updateToolbarState(){
+  if(!tbState.length) return;
+  const v = src.value, pos = src.selectionStart;
+  const ls = v.lastIndexOf('\n', pos - 1) + 1;
+  let le = v.indexOf('\n', pos); if(le === -1) le = v.length;
+  const line = v.slice(ls, le);       // строчные маркеры читаем по текущей строке
+  const before = v.slice(ls, pos);    // инлайн-обёртки — по числу маркеров до курсора
+  let inBlock = false;                // строка внутри /* … */? — прогон, как в парсере
+  for(const l of v.slice(0, ls).split('\n')){
+    const tl = l.trim();
+    if(!inBlock && /^\/\*/.test(tl)) inBlock = true;
+    else if(inBlock && /^\*\/$/.test(tl)) inBlock = false;
+  }
+  for(const { b, it } of tbState){
+    let on = false;
+    if(it.hideBlock) on = inBlock;
+    else if(it.wrap === '*')          // курсив: «одиночные» звёзды, пары жирного не в счёт
+      on = (countOcc(before, '*') - 2 * countOcc(before, '**')) % 2 === 1;
+    else if(it.wrap) on = countOcc(before, it.wrap) % 2 === 1;
+    else if(it.on)   on = it.on.test(line);
+    b.classList.toggle('active', on);
   }
 }
+// Тач: открытое подменю тулбара закрывается тапом мимо него
+document.addEventListener('click', e => {
+  if(e.target.closest && e.target.closest('.tb-group')) return;
+  document.querySelectorAll('.tb-group.open').forEach(g => g.classList.remove('open'));
+});
 function buildCheat(){
   cheatTable.innerHTML = buildSyntax().map(it =>
     it.head
@@ -470,17 +594,159 @@ function buildCheat(){
       : `<tr><td class="k">${escapeHtml(it.w)}</td><td class="v">${escapeHtml(it.g)}</td></tr>`
   ).join('');
 }
-function insertAtCursor(text){
+// --- вставка из тулбара: уважает выделение, ничего не затирает ---
+// Четыре режима кнопок (поле записи buildSyntax):
+//  wrap  — инлайн-обёртка (**…**): оборачивает выделение, повторный клик снимает,
+//          без выделения вставляет заготовку с выделенным заполнителем;
+//  line  — префикс строки (#, -, 1., [ ], >, !, //): ставится в начало всех строк
+//          выделения, маркер того же класса заменяется, повторный клик снимает;
+//  block — вставка «со своей строки» (---, таблица, Итого, [имя]=): текст не трогаем;
+//  ins   — инлайн-токен ([date], = грн, 2*3=): вставка в конец выделения.
+
+// Замена диапазона [a,b) на text. execCommand('insertText') кладёт правку в стек
+// отмены <textarea> (Cmd/Ctrl+Z работает), событие input сделает persist+paint.
+function replaceRange(a, b, text){
   src.focus();
-  // execCommand('insertText') кладёт правку в стек отмены <textarea>, поэтому
-  // Cmd/Ctrl+Z корректно откатывает вставку. Событие input сделает persist+paint.
+  src.setSelectionRange(a, b);
   if(document.execCommand && document.execCommand('insertText', false, text)) return;
   // фолбэк (если execCommand недоступен): прямая правка, но без истории отмены
-  const a = src.selectionStart, b = src.selectionEnd;
   src.value = src.value.slice(0, a) + text + src.value.slice(b);
-  const pos = a + text.length;
-  src.setSelectionRange(pos, pos);
+  src.setSelectionRange(a + text.length, a + text.length);
   persist(); paint();
+}
+// После вставки: sel — выделить последнее вхождение подстроки (заполнитель,
+// который сразу перепечатывается), caret — поставить курсор перед подстрокой.
+function placeCursor(at, ins, sel, caret){
+  if(sel){ const k = ins.lastIndexOf(sel); if(k >= 0) return src.setSelectionRange(at + k, at + k + sel.length); }
+  if(caret){ const k = ins.lastIndexOf(caret); if(k >= 0) src.setSelectionRange(at + k, at + k); }
+}
+
+function insertToken(ins, sel){
+  const pos = src.selectionEnd;                   // выделение не затираем — встаём за ним
+  replaceRange(pos, pos, ins);
+  placeCursor(pos, ins, sel);
+}
+
+function wrapSelection(mark, ph){
+  const a = src.selectionStart, b = src.selectionEnd, v = src.value, L = mark.length;
+  if(a === b){                                    // нет выделения — заготовка, заполнитель выделен
+    replaceRange(a, a, mark + ph + mark);
+    src.setSelectionRange(a + L, a + L + ph.length);
+    return;
+  }
+  const sel = v.slice(a, b);
+  // повторное нажатие снимает обёртку: маркеры внутри выделения…
+  if(sel.length >= 2*L && sel.startsWith(mark) && sel.endsWith(mark)){
+    replaceRange(a, b, sel.slice(L, sel.length - L));
+    src.setSelectionRange(a, b - 2*L);
+    return;
+  }
+  // …или вплотную вокруг него (проверка соседa — чтобы * не «съедал» половину **)
+  if(v.slice(Math.max(0, a - L), a) === mark && v.substr(b, L) === mark
+     && v[a - L - 1] !== mark[0] && v[b + L] !== mark[0]){
+    replaceRange(a - L, b + L, sel);
+    src.setSelectionRange(a - L, b - L);
+    return;
+  }
+  replaceRange(a, b, mark + sel + mark);
+  src.setSelectionRange(a + L, b + L);            // выделение остаётся на тексте
+}
+
+// Классы строчных маркеров: маркер того же класса заменяется новым (- → 1., # → ##)
+const LINE_CLS = {
+  head:    /^#{1,3}\s+/,
+  list:    /^(?:[-*]\s+|\d+\.\s+|\[[ xX]\]\s+)/,
+  callout: /^!{1,2}\s+/,
+  hide:    /^\/\/\s*/,
+  quote:   /^>\s?/,
+};
+function prefixLines(prefix, clsName){
+  const cls = LINE_CLS[clsName], v = src.value;
+  const selA = src.selectionStart, selB = src.selectionEnd;
+  const ls = v.lastIndexOf('\n', selA - 1) + 1;                  // начало первой строки
+  let le = v.indexOf('\n', selB); if(le === -1) le = v.length;   // конец последней
+  const lines = v.slice(ls, le).split('\n');
+  const numbered = /^\d+\.\s$/.test(prefix);                     // «1. » — нумеруем по порядку
+  const hasP = l => numbered ? /^\d+\.\s/.test(l) : l.startsWith(prefix);
+  const body = lines.filter(l => l.trim() !== '');
+  let n = 1, out;
+  if(body.length && body.every(hasP)){                           // все уже с маркером — снять
+    out = lines.map(l => hasP(l) ? l.replace(numbered ? /^\d+\.\s/ : prefix, '') : l);
+  }else{
+    out = lines.map(l => {
+      if(l.trim() === '' && lines.length > 1) return l;          // пустые внутри — пропускаем
+      const stripped = cls ? l.replace(cls, '') : l;
+      return (numbered ? `${n++}. ` : prefix) + stripped;
+    });
+  }
+  const text = out.join('\n');
+  replaceRange(ls, le, text);
+  if(selA === selB){                                             // курсор — сдвиг на дельту строки
+    const p = Math.max(ls, selA + out[0].length - lines[0].length);
+    src.setSelectionRange(p, p);
+  }else src.setSelectionRange(ls, ls + text.length);             // строки остаются выделенными
+}
+
+function insertBlock(text, sel, caret){
+  const v = src.value, pos = src.selectionEnd;
+  const ls = v.lastIndexOf('\n', pos - 1) + 1;
+  let le = v.indexOf('\n', pos); if(le === -1) le = v.length;
+  const lineEmpty = v.slice(ls, le).trim() === '';
+  const at = lineEmpty ? pos : le;                // строка занята — блок со следующей строки
+  const ins = lineEmpty ? text : '\n' + text;
+  replaceRange(at, at, ins);
+  placeCursor(at, ins, sel, caret);
+}
+
+// Скрыть блок: выделенные строки оборачиваются в /* … */ целиком.
+// Повторное нажатие — тоггл, как у жирного: если курсор/выделение внутри блока
+// (или на его маркерах), маркеры снимаются, текст остаётся.
+function wrapHiddenBlock(){
+  const v = src.value, selA = src.selectionStart, selB = src.selectionEnd;
+  const ls = v.lastIndexOf('\n', selA - 1) + 1;
+  let le = v.indexOf('\n', selB); if(le === -1) le = v.length;
+  // документ построчно со смещениями: {s,e} — границы, t — trim-текст
+  const lines = [];
+  for(let p = 0;;){
+    let q = v.indexOf('\n', p); if(q === -1) q = v.length;
+    lines.push({ s:p, e:q, t:v.slice(p, q).trim() });
+    if(q === v.length) break;
+    p = q + 1;
+  }
+  const i1 = lines.findIndex(l => l.s === ls);
+  const i2 = lines.findIndex(l => l.e === le);
+  // блок /* … */, пересекающийся с выделением (маркеры считаются его частью)
+  let openIdx = -1, encO = -1, encC = -1;
+  for(let j = 0; j < lines.length; j++){
+    if(openIdx === -1 && /^\/\*/.test(lines[j].t)) openIdx = j;
+    else if(openIdx !== -1 && /^\*\/$/.test(lines[j].t)){
+      if(openIdx <= i2 && j >= i1){ encO = openIdx; encC = j; break; }
+      openIdx = -1;
+    }
+  }
+  if(encO === -1 && openIdx !== -1 && openIdx <= i2){ encO = openIdx; encC = -1; } // незакрытый блок
+  if(encO !== -1){                                   // уже скрыто — снимаем маркеры
+    const till = encC === -1 ? lines.length : encC;
+    const text = lines.slice(encO + 1, till).map(l => v.slice(l.s, l.e)).join('\n');
+    const to = encC === -1 ? v.length : lines[encC].e;
+    replaceRange(lines[encO].s, to, text);
+    src.setSelectionRange(lines[encO].s, lines[encO].s + text.length);
+    return;
+  }
+  if(selA === selB) return insertBlock('/*\n\n*/\n', null, '\n*/');
+  const text = '/*\n' + v.slice(ls, le) + '\n*/';
+  replaceRange(ls, le, text);
+  src.setSelectionRange(ls, ls + text.length);
+}
+
+// Единая точка запуска кнопки/пункта подменю (payload — вставка пункта подменю)
+function runInsert(it, payload){
+  if(it.hideBlock)   wrapHiddenBlock();
+  else if(it.wrap)   wrapSelection(it.wrap, it.ph || '');
+  else if(it.line)   prefixLines(payload ?? it.line, it.cls);
+  else if(it.block)  insertBlock(payload ?? it.block, it.sel, it.caret);
+  else               insertToken(payload ?? it.ins, it.sel);
+  updateToolbarState();
 }
 
 // --- дата: [date] / [date:time] заменяются в самом тексте (фиксируются) ---
@@ -525,7 +791,7 @@ function makeTable(cols, rows){
 function createTable(){
   const text = makeTable(+tblCols.value, +tblRows.value);
   closeTableDlg();
-  insertAtCursor(text);
+  insertBlock(text);
 }
 
 // --- настройки языка / ключевых слов ---
@@ -579,6 +845,16 @@ function reflectFolder(){
 
 // --- events ---
 src.addEventListener('input', ()=>{ expandDateAtCursor(); persist(); paint(); });
+// Подсветка активных кнопок тулбара следует за курсором
+['keyup','click','focus'].forEach(ev => src.addEventListener(ev, updateToolbarState));
+document.addEventListener('selectionchange', () => { if(document.activeElement === src) updateToolbarState(); });
+// Привычные хоткеи начертаний — работают с выделением так же, как кнопки
+src.addEventListener('keydown', e => {
+  if(!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  const k = e.key.toLowerCase();
+  if(k === 'b'){ e.preventDefault(); wrapSelection('**', t('exBold')); }
+  else if(k === 'i'){ e.preventDefault(); wrapSelection('*', t('exItalic')); }
+});
 search.addEventListener('input', ()=>{ query = search.value; drawList(); });
 $('#helpBtn').onclick = ()=>{ cheat.hidden = false; };
 $('#cheatClose').onclick = ()=>{ cheat.hidden = true; };
