@@ -60,6 +60,8 @@ function buildPatterns(){
   RE.declared  = new RegExp(`${tot}${NL}\\s*:?\\s*(\\d[\\d\\s]*)`, 'gi');
   RE.posPrice  = new RegExp(`=\\s*[\\d][\\d\\s]*\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
+  RE.varRef    = new RegExp(`(=\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
+  RE.posVar    = new RegExp(`=\\s*\\[([^\\]]+)\\]\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
 }
 buildPatterns();
 // Применить новые значения ключевых слов (частичный патч) и пересобрать регулярки.
@@ -204,6 +206,23 @@ export function inline(text){
     return `${formula}${eq}<span class="calc-res">${fmtNum(r)}</span>`;
   });
 
+  // Одиночная [ссылка] на переменную вне формулы — подставляем её значение.
+  // «= [имя] грн» — как обычная цена с «=»: идёт в Σ; «[имя] грн» — прочая цена.
+  // Неизвестные имена (шаблоны [4000 шт], [date] и т.п.) не трогаем.
+  s = s.replace(RE.varRef, (m, eq, nm, grn, unit) => {
+    const v = VARS[nm.trim()];
+    if(v == null) return m;
+    if(grn){
+      if(unit) return `<span class="price-other">${fmtNum(v)} ${C}${unit}</span>`;
+      if(eq){
+        sum += Math.round((v + Number.EPSILON) * 100) / 100;
+        return `<span class="calc-eq">=</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
+      }
+      return `<span class="price-other">${fmtNum(v)} ${C}</span>`;
+    }
+    return `${eq || ''}<span class="var-ref">${fmtVar(v)}</span>`;
+  });
+
   s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   s = s.replace(/==\s*([^=]+?)\s*==/g,'<mark>$1</mark>');
   s = s.replace(/~~([^~]+)~~/g,'<del>$1</del>');
@@ -237,7 +256,10 @@ export function render(text){
   let hiddenBlock = false; // мы внутри /* … */
   let blockStart = 0;      // строка с «/*» — для предупреждения о незакрытом блоке
   let hidden = false;      // текущая строка скрыта
-  const emit = h => { if(!hidden) html += h; };
+  // data-line: номер строки источника на каждом блоке — якоря для синхронного
+  // скролла редактор ↔ рендер (см. main.js).
+  let curLine = 0;
+  const emit = h => { if(!hidden) html += h.replace(/^<([a-zA-Z][a-zA-Z0-9]*)/, `<$1 data-line="${curLine}"`); };
 
   // строка таблицы: начинается и кончается «|» и содержит хотя бы 2 «|»
   const isTableRow = t => t.startsWith('|') && t.endsWith('|') && (t.match(/\|/g)||[]).length >= 2;
@@ -247,6 +269,7 @@ export function render(text){
   for(let lineIdx = 0; lineIdx < lines.length; lineIdx++){
     const raw = lines[lineIdx].trim();
     if(raw === '') continue;
+    curLine = lineIdx;
 
     // границы блока: «/*» открывает (хвост строки — метка, можно писать зачем прячем)
     if(!hiddenBlock && /^\/\*/.test(raw)){ hiddenBlock = true; blockStart = lineIdx; continue; }
@@ -415,6 +438,9 @@ export function render(text){
 
   positions = (text.match(RE.posPrice)||[]).length     // цены = N грн (кроме /шт)
             + (text.match(RE.posCalc)||[]).length;      // калькулятор = грн (кроме /шт)
+  RE.posVar.lastIndex = 0;
+  for(const mm of text.matchAll(RE.posVar))             // = [переменная] грн (кроме /шт)
+    if(VARS[mm[1].trim()] != null) positions++;
 
   return {
     html,
