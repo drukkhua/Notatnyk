@@ -1,0 +1,25 @@
+[package]
+name = "notatnyk"
+version = "1.0.0"
+description = "Лёгкий блокнот с авто-суммой Σ"
+authors = ["you"]
+edition = "2021"
+
+# Библиотека — общая для десктопа и мобильных.
+[lib]
+name = "notatnyk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# при сборке в проде отключаем devtools
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Rust build output
+src-tauri/target/
+
+# Tauri generated schemas
+src-tauri/gen/schemas/
+
+# Build output
+dist/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Local Claude settings
+.claude/settings.local.json
