@@ -272,7 +272,114 @@ function paint(){
       persist(); paint();
     };
   });
+
+  updateGutter();      // номера строк — под новую геометрию текста
+  collectAnchors();    // якоря синк-скролла — по свежему рендеру
 }
+
+// ── Номера строк и синхронный скролл: редактор ↔ рендер ─────────────────────
+// Высоты логических строк меряем «зеркалом» — дивом с метриками textarea: при
+// переносе строка занимает несколько визуальных рядов, и её номер должен занять
+// её реальную высоту. Синк скролла — по якорям data-line, которые движок ставит
+// на каждый блок рендера: проценты «плывут» на таблицах и скрытых блоках, якоря
+// с интерполяцией между ними — нет. Ведёт та панель, где находится пользователь.
+const gutterInner = $('#gutterInner');
+let mirror = null;                       // измеритель высот строк
+let lineTops = [0], lineHeights = [];    // геометрия строк источника
+let anchors = [];                        // [{line, top}] — блоки рендера
+let activePane = null;                   // 'src' | 'out' — кто ведёт синк
+
+function ensureMirror(){
+  if(mirror) return;
+  const cs = getComputedStyle(src);
+  mirror = document.createElement('div');
+  Object.assign(mirror.style, {
+    position:'absolute', left:'-99999px', top:'0', visibility:'hidden',
+    whiteSpace:'pre-wrap', wordBreak:'break-word',
+    font:cs.font, letterSpacing:cs.letterSpacing,
+  });
+  document.body.appendChild(mirror);
+}
+
+function updateGutter(){
+  const cs = getComputedStyle(src);
+  const w = src.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if(w <= 0) return;                     // редактор скрыт (viewonly / телефон)
+  ensureMirror();
+  mirror.style.width = w + 'px';
+  const lines = src.value.split('\n');
+  mirror.innerHTML = '';
+  const cells = lines.map(l => {
+    const d = document.createElement('div');
+    d.textContent = l === '' ? ' ' : l;
+    mirror.appendChild(d);
+    return d;
+  });
+  lineHeights = cells.map(d => d.offsetHeight);
+  mirror.innerHTML = '';
+  lineTops = [0];
+  for(const h of lineHeights) lineTops.push(lineTops[lineTops.length - 1] + h);
+  const lh = parseFloat(cs.lineHeight) || 22;  // высота одного визуального ряда
+  gutterInner.style.width = (String(lines.length).length + 1) + 'ch';
+  gutterInner.innerHTML = lines.map((_, i) =>
+    `<div style="height:${lineHeights[i]}px;line-height:${lh}px">${i + 1}</div>`).join('');
+}
+
+// Позиции блоков рендера в координатах скролла #out
+function collectAnchors(){
+  anchors = [];
+  const oTop = out.getBoundingClientRect().top;
+  out.querySelectorAll('[data-line]').forEach(el => {
+    anchors.push({ line:+el.dataset.line, top: el.getBoundingClientRect().top - oTop + out.scrollTop });
+  });
+}
+
+// y источника (px контента) ↔ дробный номер строки
+function lineAtY(y){
+  let lo = 0, hi = lineHeights.length - 1, i = 0;
+  while(lo <= hi){ const m = (lo + hi) >> 1; if(lineTops[m] <= y){ i = m; lo = m + 1; } else hi = m - 1; }
+  const h = lineHeights[i] || 22;
+  return i + Math.max(0, Math.min(1, (y - lineTops[i]) / h));
+}
+const yAtLine = ln => {
+  const i = Math.max(0, Math.min(lineHeights.length - 1, Math.floor(ln)));
+  return lineTops[i] + (ln - i) * (lineHeights[i] || 22);
+};
+
+function syncFromSrc(){
+  if(!anchors.length || !lineHeights.length) return;
+  const ln = lineAtY(src.scrollTop);
+  let a = anchors[0], b = null;
+  for(const an of anchors){ if(an.line <= ln) a = an; else { b = an; break; } }
+  const base = anchors[0].top;           // верхний отступ рендера — в ноль
+  const target = b
+    ? a.top + (b.top - a.top) * (ln - a.line) / (b.line - a.line || 1)
+    : a.top + (yAtLine(ln) - yAtLine(a.line));
+  out.scrollTop = Math.max(0, target - base);
+}
+
+function syncFromOut(){
+  if(!anchors.length || !lineHeights.length) return;
+  const y = out.scrollTop + anchors[0].top;
+  let a = anchors[0], b = null;
+  for(const an of anchors){ if(an.top <= y) a = an; else { b = an; break; } }
+  const ln = b
+    ? a.line + (b.line - a.line) * (y - a.top) / (b.top - a.top || 1)
+    : a.line + (y - a.top) / (lineHeights[0] || 22);
+  src.scrollTop = Math.max(0, yAtLine(ln));
+}
+
+src.addEventListener('mouseenter', () => activePane = 'src');
+out.addEventListener('mouseenter', () => activePane = 'out');
+src.addEventListener('touchstart', () => activePane = 'src', { passive:true });
+out.addEventListener('touchstart', () => activePane = 'out', { passive:true });
+src.addEventListener('focus', () => activePane = 'src');
+src.addEventListener('scroll', () => {
+  gutterInner.style.transform = `translateY(${-src.scrollTop}px)`;
+  if(activePane === 'src') syncFromSrc();
+});
+out.addEventListener('scroll', () => { if(activePane === 'out') syncFromOut(); });
+new ResizeObserver(() => { updateGutter(); collectAnchors(); }).observe(src);
 
 function persist(){
   const n = current(); if(!n) return;

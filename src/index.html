@@ -59,7 +59,10 @@
       <div class="split" id="split">
         <section class="pane editorpane" id="editorpane">
           <div id="toolbar" class="toolbar"></div>
-          <textarea id="src" spellcheck="false" data-i18n-ph="srcPh"></textarea>
+          <div class="editor-body">
+            <div class="gutter" aria-hidden="true"><div id="gutterInner" class="gutter-inner"></div></div>
+            <textarea id="src" spellcheck="false" data-i18n-ph="srcPh"></textarea>
+          </div>
         </section>
         <div class="divider" id="divider" data-i18n-title="dividerTitle"></div>
         <section class="pane renderpane">

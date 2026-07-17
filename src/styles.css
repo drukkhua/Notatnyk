@@ -6,6 +6,7 @@
   --callout-bg:#fffbeb; --callout-line:#f5e3a8; --callout-tx:#92620e;
   --danger-bg:#fef2f2; --danger-line:#fbd5d5; --danger-tx:#b42318;
   --check:#2f6df0; --done:#8b93a1; --green:#28a76a; --focus:#2f6df0;
+  --src-bg:#e9ecf2; --src-num:#9aa3b3;   /* фон источника темнее бумаги; номера строк */
 }
 [data-theme="dark"]{
   --ink:#e8ebf2; --ink-soft:#9aa3b5; --formula:#5f6878; --paper:#161b26; --paper-2:#1d2330;
@@ -15,6 +16,7 @@
   --callout-bg:#2b2312; --callout-line:#57451c; --callout-tx:#f0cf7e;
   --danger-bg:#2e1717; --danger-line:#5f2a27; --danger-tx:#f29d95;
   --check:#5b8cff; --done:#6b7385; --green:#2fbd7e; --focus:#6b8cff;
+  --src-bg:#212a3b; --src-num:#5a6579;   /* в тёмной теме источник светлее бумаги */
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
@@ -98,8 +100,14 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   color:var(--ink);cursor:pointer;font-size:12px;line-height:1.4;
   font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
 .tb-btn:hover{background:var(--sum-bg);border-color:var(--sum-line);}
-#src{flex:1;resize:none;border:0;outline:none;padding:18px;
-  background:var(--paper);color:var(--ink);
+/* Источник: колонка номеров + textarea на общем фоне --src-bg */
+.editor-body{flex:1;display:flex;min-height:0;background:var(--src-bg);}
+.gutter{flex:none;overflow:hidden;padding:18px 0;user-select:none;}
+.gutter-inner{text-align:right;color:var(--src-num);padding:0 8px 0 6px;
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px;
+  will-change:transform;}
+#src{flex:1;resize:none;border:0;outline:none;padding:18px 18px 18px 8px;
+  background:transparent;color:var(--ink);
   font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:13px;line-height:1.7;}
 .rendered{flex:1;overflow:auto;padding:20px 24px;background:var(--paper);
   font-size:14.5px;line-height:1.5;}
@@ -227,4 +235,6 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   .editorpane{border-bottom:1px solid var(--line-2);}
   .divider{display:none;}
   .doc-title{max-width:18ch;}
+  .gutter{display:none;}              /* на телефоне ширина дороже номеров */
+  #src{padding-left:18px;}
 }
