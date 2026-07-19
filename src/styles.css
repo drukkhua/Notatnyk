@@ -207,20 +207,25 @@ body.col-resizing{cursor:col-resize;user-select:none;}
    Чисто визуальный класс на #out; движок не знает о пресете. Тот же класс
    используется в экспортированном HTML («Отдать клиенту»). Шрифт и размер —
    через --doc-font/--doc-size (меню «Aa»). */
+/* Внутри пресета ВСЕ размеры — в em от --doc-size: только так S/M/L из меню
+   «Aa» масштабирует документ целиком (px-размеры глушили бы наследование). */
 .rendered.doc-mode{font-family:var(--doc-font);
   font-size:var(--doc-size);line-height:1.68;padding:34px 46px;}
-.doc-mode .r-h1{font-size:26px;font-weight:700;color:var(--ink);letter-spacing:0;
+.doc-mode .r-h1{font-size:1.73em;font-weight:700;color:var(--ink);letter-spacing:0;
   border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:16px;}
-.doc-mode .r-h2{font-size:19px;margin:22px 0 9px;}
-.doc-mode .r-h3{font-size:15px;color:var(--ink);}
-.doc-mode .r-num{font-size:15.5px;margin:6px 0;}
-.doc-mode .r-li,.doc-mode .r-p{font-size:14.5px;color:var(--ink);line-height:1.65;}
-.doc-mode .r-total{font-size:18px;margin:14px 0;}
+.doc-mode .r-h2{font-size:1.27em;margin:22px 0 9px;}
+.doc-mode .r-h3{font-size:1em;color:var(--ink);}
+.doc-mode .r-num{font-size:1.03em;margin:6px 0;}
+.doc-mode .r-li,.doc-mode .r-p{font-size:0.97em;color:var(--ink);line-height:1.65;}
+.doc-mode .r-total{font-size:1.2em;margin:14px 0;}
 .doc-mode .price-sum,.doc-mode .calc-res{font-size:1em;padding:2px 12px;}
-.doc-mode .r-table{font-size:14px;}
+.doc-mode .r-table{font-size:0.93em;}
 .doc-mode .r-table td{padding:9px 12px;}
 .doc-mode .r-quote{background:transparent;border-left:3px solid var(--line-2);
   border-radius:0;padding:8px 14px;}
+.doc-mode .r-quote-body{font-size:0.97em;}
+.doc-mode .r-callout{font-size:0.97em;}
+.doc-mode .r-var{font-size:0.9em;}
 .doc-mode .r-check{cursor:default;}
 
 /* footer */
