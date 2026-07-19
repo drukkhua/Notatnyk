@@ -47,6 +47,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
             </button>
           </div>
+          <button id="fontBtn" class="ghost" data-i18n-title="fontTitle" style="font-size:13px;font-weight:700;">Aa</button>
           <button id="docBtn" class="ghost" data-i18n-title="docMode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
           </button>
@@ -103,6 +104,25 @@
           <label><span data-i18n="cols">Столбцов</span><input id="tblCols" type="number" min="1" max="12" value="3"></label>
           <label><span data-i18n="rows">Строк</span><input id="tblRows" type="number" min="1" max="50" value="3"></label>
           <button id="tblCreate" class="tbl-create" data-i18n="create">Создать</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="docDlg" class="cheat" hidden>
+      <div class="cheat-box loc-box">
+        <div class="cheat-head">
+          <b data-i18n="fontTitle">Шрифт документа</b>
+          <button id="docDlgClose" class="ghost" data-i18n-title="close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="loc-form">
+          <div id="fontCards" class="font-cards"></div>
+          <label class="font-size-row"><span data-i18n="fontSizeLbl">Размер текста</span>
+            <span class="seg" id="fontSizes">
+              <button type="button" class="seg-btn" data-size="14">S</button>
+              <button type="button" class="seg-btn" data-size="15">M</button>
+              <button type="button" class="seg-btn" data-size="16.5">L</button>
+            </span>
+          </label>
         </div>
       </div>
     </div>

@@ -53,12 +53,19 @@ async function loadConfig(){
       if(cfg.folder && await exists(cfg.folder, {})) loc = customLoc(cfg.folder);
       if(cfg.lang) lang = LANGS.includes(cfg.lang) ? cfg.lang : 'ru';
       if(cfg.locale) kwOverrides = cfg.locale;     // ручные правки ключевых слов
+      if(cfg.doc){                                  // шрифт/размер документа («Aa»)
+        if(cfg.doc.font in DOC_FONTS) docFont = cfg.doc.font;
+        if(+cfg.doc.size > 10 && +cfg.doc.size < 30) docSize = +cfg.doc.size;
+      }
     }
   }catch{ loc = defaultLoc(); }
 }
 async function saveConfig(){
   const folder = loc.custom ? loc.dir : null;
-  await writeTextFile(CONFIG, JSON.stringify({ folder, lang, locale: kwOverrides }), base);
+  await writeTextFile(CONFIG, JSON.stringify({
+    folder, lang, locale: kwOverrides,
+    doc: { font: docFont, size: docSize },
+  }), base);
 }
 
 // --- state ---
@@ -114,7 +121,7 @@ function applyLang(code, overrides){
   setLocale({ ...T.kw, ...(overrides || {}) });   // keywords движка (+ пользовательские правки)
   document.documentElement.setAttribute('lang', lang);
   applyDomText();
-  buildToolbar(); buildCheat();
+  buildToolbar(); buildCheat(); buildFontCards();
   reflectFolder();
   if(currentId !== undefined) paint();
   drawList();
@@ -870,13 +877,15 @@ async function exportNote(){
 
   let css = '';
   try{ css = await (await fetch('styles.css')).text(); }catch{}
+  // выбранный шрифт/размер документа уезжает вместе со сметой
+  const fontCss = `:root{--doc-font:${(DOC_FONTS[docFont]||DOC_FONTS.sans).stack};--doc-size:${docSize}px;}`;
   const page = `<!DOCTYPE html>
 <html lang="${lang}" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<style>${css}\n${EXPORT_CSS}</style>
+<style>${css}\n${EXPORT_CSS}\n${fontCss}</style>
 </head>
 <body class="export">
 <article class="rendered doc-mode">${html}</article>
@@ -908,6 +917,61 @@ function applyDocMode(on){
   $('#docBtn').classList.toggle('active', on);
   try{ localStorage.setItem(DOCMODE_KEY, on ? '1' : ''); }catch{}
   collectAnchors();                     // геометрия блоков изменилась — якоря заново
+}
+
+// ── Шрифт документа (меню «Aa») ─────────────────────────────────────────────
+// Системные кросс-ОС стеки: без бандлинга файлов (лёгкость), у всех — полная
+// кириллица и РОВНЫЕ (lining) цифры. Georgia исключена сознательно: её
+// минускульные цифры прыгают ниже строки — в смете из цифр это выглядит грязно.
+const DOC_FONTS = {
+  sans: {   // дефолт: родной шрифт каждой ОС — самый «нативный» вид для клиента
+    name:'fontSans', note:'fontSansNote',
+    stack:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif' },
+  serif: {  // деловой документ: Charter (mac) / Cambria,Sitka (win) / PT+Noto (linux)
+    name:'fontSerif', note:'fontSerifNote',
+    stack:'Charter,"Bitstream Charter",Cambria,"Sitka Text","PT Serif","Noto Serif","Times New Roman",serif' },
+  legible: { // Verdana: рисован для экрана, максимальный x-height, есть везде кроме Android
+    name:'fontLegible', note:'fontLegibleNote',
+    stack:'Verdana,"DejaVu Sans",Tahoma,Geneva,sans-serif' },
+};
+let docFont = 'sans';
+let docSize = 15;
+function applyDocFont(){
+  const f = DOC_FONTS[docFont] || DOC_FONTS.sans;
+  document.documentElement.style.setProperty('--doc-font', f.stack);
+  document.documentElement.style.setProperty('--doc-size', docSize + 'px');
+  // активные состояния в диалоге
+  document.querySelectorAll('.font-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.font === docFont));
+  document.querySelectorAll('#fontSizes .seg-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.dataset.size) === docSize));
+}
+// Карточки шрифтов: каждая рисуется СВОИМ стеком — предпросмотр вместо слов
+function buildFontCards(){
+  const box = $('#fontCards');
+  box.innerHTML = '';
+  for(const key in DOC_FONTS){
+    const f = DOC_FONTS[key];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'font-card';
+    b.dataset.font = key;
+    b.style.fontFamily = f.stack;
+    b.innerHTML = `<span class="fc-name">${escapeHtml(t(f.name))}</span>`
+      + `<span class="fc-note">${escapeHtml(t(f.note))}</span>`
+      + `<span class="fc-sample">${escapeHtml(t('fontSample'))}</span>`;
+    b.onclick = ()=>{
+      docFont = key;
+      applyDocFont(); saveConfig();
+      if(!out.classList.contains('doc-mode')) applyDocMode(true); // показать эффект сразу
+    };
+    box.appendChild(b);
+  }
+  applyDocFont();
+}
+function openDocDlg(){
+  $('#docDlg').hidden = false;
+  if(!out.classList.contains('doc-mode')) applyDocMode(true);   // предпросмотр — на живом рендере
 }
 
 // --- настройки языка / ключевых слов ---
@@ -990,6 +1054,13 @@ $('#newBtn').onclick = newNote;
 $('#delBtn').onclick = deleteCurrent;
 $('#docBtn').onclick = ()=> applyDocMode(!out.classList.contains('doc-mode'));
 $('#exportBtn').onclick = exportNote;
+$('#fontBtn').onclick = openDocDlg;
+$('#docDlgClose').onclick = ()=>{ $('#docDlg').hidden = true; };
+$('#docDlg').onclick = (e)=>{ if(e.target === $('#docDlg')) $('#docDlg').hidden = true; };
+document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
+  docSize = parseFloat(b.dataset.size);
+  applyDocFont(); saveConfig();
+});
 
 // --- перетаскиваемый разделитель редактора/рендера ---
 (function initSplitter(){
