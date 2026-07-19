@@ -603,6 +603,15 @@ function buildSyntax(){
     { btn:tot,              block:`${tot}  ${cur}`, caret:` ${cur}`,
                             w:`${tot}: N ${cur}`,                                 g:t('sTotal') },
     { btn:`[${unit}]`,      ins:`[4000 ${unit}]`, sel:'4000', w:`[4000 ${unit}]`, g:t('sQtyUnit', { total: tot }) },
+
+    // Денежная петля: строковые и спец-переменные → кнопки в экспорте «Отдать клиенту».
+    // Только в шпаргалке (без кнопок тулбара — бюджет хрома, complexity-audit §5).
+    { head: t('grpEstimate') },
+    {                       w:`[${t('exVar')}] = ${t('exStr')}`,                    g:t('sStrVar') },
+    {                       w:`[${LOCALE.payVar}] = https://…`,                     g:t('sPayVar') },
+    {                       w:`[${LOCALE.depositVar}] = 30%`,                        g:t('sDeposit', { total: tot }) },
+    {                       w:`[${LOCALE.validVar}] = 01.08`,                        g:t('sValid') },
+    {                       w:`[${LOCALE.emailVar}] = …`,                            g:t('sEmailVar') },
   ];
 }
 
