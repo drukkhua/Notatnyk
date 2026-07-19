@@ -924,12 +924,22 @@ function applyDocMode(on){
 // кириллица и РОВНЫЕ (lining) цифры. Georgia исключена сознательно: её
 // минускульные цифры прыгают ниже строки — в смете из цифр это выглядит грязно.
 const DOC_FONTS = {
+  // ── без засечек ──
   sans: {   // дефолт: родной шрифт каждой ОС — самый «нативный» вид для клиента
     name:'fontSans', note:'fontSansNote',
     stack:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif' },
-  serif: {  // деловой документ: Charter (mac) / Cambria,Sitka (win) / PT+Noto (linux)
+  grotesk: { // прямой нейтральный гротеск: Helvetica — классика деловой Америки,
+             // Arial (win), Liberation Sans (linux, метрический клон Arial)
+    name:'fontGrotesk', note:'fontGroteskNote',
+    stack:'"Helvetica Neue",Helvetica,Arial,"Liberation Sans",Roboto,"Noto Sans",sans-serif' },
+  // ── с засечками ──
+  serif: {  // книжный документ: Charter (mac) / Cambria,Sitka (win) / PT+Noto (linux)
     name:'fontSerif', note:'fontSerifNote',
     stack:'Charter,"Bitstream Charter",Cambria,"Sitka Text","PT Serif","Noto Serif","Times New Roman",serif' },
+  times: {  // стандарт деловых/юридических документов США, есть буквально везде
+    name:'fontTimes', note:'fontTimesNote',
+    stack:'"Times New Roman",Times,"Liberation Serif","Nimbus Roman","Noto Serif",serif' },
+  // ── экранная читабельность ──
   legible: { // Verdana: рисован для экрана, максимальный x-height, есть везде кроме Android
     name:'fontLegible', note:'fontLegibleNote',
     stack:'Verdana,"DejaVu Sans",Tahoma,Geneva,sans-serif' },
