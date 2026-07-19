@@ -1,0 +1,225 @@
+<div id="app" data-theme="light">
+  <div class="topbar">
+    <div class="modes">
+      <button class="mode active" data-mode="live">① Live-preview</button>
+      <button class="mode" data-mode="wysiwyg">② WYSIWYG</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="stage">
+    <div id="editor" class="editor" contenteditable="true" spellcheck="false"></div>
+  </div>
+
+  <div class="footer">
+    <span id="sumLabel">Σ позицій (0) : <b>0 грн</b></span>
+    <span id="sumState" class="ok">—</span>
+  </div>
+</div>
+
+<style>
+  #app{--ink:#1a1f2b;--soft:#5b6577;--paper:#fff;--paper2:#f4f5f7;--line:#e7e9ee;
+    --line2:#d7dbe3;--sum-bg:#e8ecfb;--sum-tx:#3350c8;--sum-line:#c9d3f6;
+    --mark:#ffe27a;--mark-tx:#5a4708;--check:#2f6df0;--done:#8b93a1;--green:#28a76a;
+    --callout-bg:#fdf6e3;--callout-line:#e8c34a;--callout-tx:#7a5f10;--syntax:#b0b7c3;
+    font-family:ui-sans-serif,"Segoe UI",system-ui,sans-serif;color:var(--ink);
+    display:flex;flex-direction:column;height:100vh;background:var(--paper);}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:10px 16px;border-bottom:1px solid var(--line);background:var(--paper2);}
+  .modes{display:flex;gap:6px;}
+  .mode{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px;
+    border:1px solid var(--line2);background:var(--paper);color:var(--soft);cursor:pointer;}
+  .mode.active{background:var(--check);color:#fff;border-color:var(--check);}
+  .hint{font-size:12px;color:var(--soft);max-width:60ch;text-align:right;line-height:1.4;}
+  .stage{flex:1;overflow:auto;padding:22px 26px;}
+  .editor{max-width:760px;margin:0 auto;outline:none;font-size:15px;line-height:1.55;min-height:100%;}
+  .editor > div{margin:2px 0;}
+
+  /* rendered block styles (shared) */
+  .b-h1{font-size:21px;font-weight:800;margin:6px 0 8px;}
+  .b-h2{font-size:16px;font-weight:700;margin:14px 0 6px;}
+  .b-num{font-weight:700;font-size:14px;}
+  .b-li{color:var(--soft);font-size:13.5px;padding-left:16px;position:relative;}
+  .b-li::before{content:"•";position:absolute;left:2px;color:var(--line2);}
+  .b-check{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--check);}
+  .b-check.done{color:var(--done);}
+  .b-check .box{width:17px;height:17px;border:2px solid currentColor;border-radius:5px;
+    display:inline-grid;place-items:center;font-size:11px;flex:none;cursor:pointer;}
+  .b-check.done .box{background:var(--done);color:#fff;}
+  .b-check .stamp{font-size:10px;font-weight:700;color:var(--done);}
+  .b-callout{background:var(--callout-bg);border:1px solid var(--callout-line);
+    border-left:4px solid var(--callout-line);border-radius:8px;padding:9px 12px;
+    color:var(--callout-tx);font-weight:600;}
+  .b-hr{border:0;border-top:1px solid var(--line2);margin:10px 0;}
+  .b-hr2{border:0;border-top:2px solid var(--line2);margin:6px 0;}
+  .b-total{font-size:14px;} .b-total b{font-weight:800;}
+  b.strong{font-weight:800;} mark.hl{background:var(--mark);color:var(--mark-tx);
+    padding:0 4px;border-radius:3px;}
+  .chip-sum{background:var(--sum-bg);color:var(--sum-tx);border:1px solid var(--sum-line);
+    font-weight:800;padding:1px 7px;border-radius:6px;}
+  .chip-other{font-weight:800;}
+
+  /* syntax markers — visible in LIVE, hidden in WYSIWYG */
+  .syn{color:var(--syntax);font-family:ui-monospace,Menlo,monospace;font-size:.85em;}
+  #app[data-view="wysiwyg"] .syn{display:none;}
+
+  .footer{display:flex;align-items:center;justify-content:space-between;
+    padding:11px 16px;border-top:1px solid var(--line);background:var(--paper2);font-size:14px;}
+  #sumLabel b{color:var(--sum-tx);}
+  .footer .ok{color:var(--green);font-weight:700;font-size:12px;}
+  .footer .bad{color:#d3452f;font-weight:700;font-size:12px;}
+</style>
+
+<script>
+(function(){
+  const app = document.getElementById('app');
+  const editor = document.getElementById('editor');
+  const hint = document.getElementById('hint');
+  const sumLabel = document.getElementById('sumLabel');
+  const sumState = document.getElementById('sumState');
+
+  const SAMPLE = [
+    "# Nebula Серия, 20 видов",
+    "[x] 5ml - 5 видов",
+    "1. COLA VANILLA флакон 5ml.pdf",
+    "2. ICE-CREAM флакон 5ml.pdf",
+    "---",
+    "5 вида = 120 А3 =  12 450 грн",
+    "[x] 10ml - 5 видов",
+    "1000 шт = 24 А3 - 2490 грн",
+    "5 вида = 145 А3 = 14 150 грн",
+    "===",
+    "Итого 26600 грн",
+    "===",
+    "! Разбито на 2 файла по печати",
+    "== важное выделение =="
+  ];
+
+  const HINTS = {
+    live: "Разметка остаётся видна серым (#, [x], =…=), но текст тут же оформляется. Курсор ходит по «сырому» тексту — предсказуемо, легко править. Это путь Noteriv.",
+    wysiwyg: "Символы разметки скрыты — видишь только результат, как в Word. Красиво, но прав&shy;ить сложнее: где стоял `#`, глазом не найти. Клик по чекбоксу работает."
+  };
+
+  // текущее «сырое» содержимое как массив строк
+  let lines = SAMPLE.slice();
+
+  function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  function fmt(n){return n.toLocaleString('ru-RU');}
+
+  // инлайн: возвращает html; маркеры оборачиваем в <span class=syn> чтобы прятать в wysiwyg
+  function inline(t){
+    let s = esc(t), sum = 0;
+    s = s.replace(/(=?)\s*(\d[\d\s]*)\s*грн(?![а-яёА-ЯЁa-z])/gi,(m,eq,n)=>{
+      const v=parseInt(n.replace(/\s/g,''),10)||0;
+      if(eq==='='){sum+=v;return `<span class="syn">= </span><span class="chip-sum">${fmt(v)} грн</span>`;}
+      return `<span class="chip-other">${fmt(v)} грн</span>`;
+    });
+    s = s.replace(/\*\*([^*]+)\*\*/g,'<span class="syn">**</span><b class="strong">$1</b><span class="syn">**</span>');
+    s = s.replace(/==\s*([^=]+?)\s*==/g,'<span class="syn">==</span><mark class="hl">$1</mark><span class="syn">==</span>');
+    return {html:s,sum};
+  }
+
+  // отрисовать все строки как блоки внутри редактора
+  function render(preserveCaret){
+    let total=0, checks=0, done=0, positions=0, declared=null;
+    const html = lines.map((raw,idx)=>{
+      const t = raw.trim();
+      const dataAttr = `data-line="${idx}"`;
+      if(t===''){return `<div ${dataAttr}><br></div>`;}
+      if(/^={3,}$/.test(t)) return `<div ${dataAttr}><span class="syn">===</span><hr class="b-hr2"></div>`;
+      if(/^-{3,}$/.test(t)) return `<div ${dataAttr}><span class="syn">---</span><hr class="b-hr"></div>`;
+      let m;
+      if(m=t.match(/^(#{1,2})\s+(.*)$/)){
+        const r=inline(m[2]);total+=r.sum;
+        return `<div ${dataAttr} class="b-h${m[1].length}"><span class="syn">${m[1]} </span>${r.html}</div>`;
+      }
+      if(m=t.match(/^\[([ xX])\]\s*(.*)$/)){
+        const d=m[1].toLowerCase()==='x';checks++;if(d)done++;
+        const r=inline(m[2]);total+=r.sum;
+        return `<div ${dataAttr} class="b-check${d?' done':''}">`
+          +`<span class="syn">[${m[1]}] </span>`
+          +`<span class="box" data-toggle="${idx}">${d?'✓':''}</span>`
+          +`<span>${r.html}</span>`+(d?'<span class="stamp">ОТПЕЧАТАНО</span>':'')+`</div>`;
+      }
+      if(m=t.match(/^(!!?)\s+(.*)$/)){
+        const r=inline(m[2]);total+=r.sum;
+        return `<div ${dataAttr} class="b-callout"><span class="syn">${m[1]} </span>⚠️ ${r.html}</div>`;
+      }
+      if(/^Итого/i.test(t)){
+        const dm=t.match(/(\d[\d\s]*)/);if(dm)declared=parseInt(dm[1].replace(/\s/g,''),10);
+        const r=inline(t);
+        return `<div ${dataAttr} class="b-total">${r.html.replace(/^Итого/,'<b>Итого</b>')}</div>`;
+      }
+      if(m=t.match(/^(\d+)\.\s+(.*)$/)){
+        const r=inline(m[2]);total+=r.sum;
+        return `<div ${dataAttr} class="b-num"><span class="synnum">${m[1]}. </span>${r.html}</div>`;
+      }
+      if(m=t.match(/^[-*]\s+(.*)$/)){
+        const r=inline(m[1]);total+=r.sum;
+        return `<div ${dataAttr} class="b-li"><span class="syn">- </span>${r.html}</div>`;
+      }
+      const r=inline(t);total+=r.sum;
+      return `<div ${dataAttr} class="b-li" style="padding-left:0">${r.html}</div>`;
+    }).join('');
+
+    positions = lines.join('\n').match(/=\s*[\d][\d\s]*\s*грн/gi);
+    positions = positions?positions.length:0;
+
+    editor.innerHTML = html;
+
+    sumLabel.innerHTML = `Σ позицій (${positions}) : <b>${fmt(total)} грн</b>`;
+    if(declared!=null){
+      const ok = declared===total;
+      sumState.className = ok?'ok':'bad';
+      sumState.textContent = ok?'✓ співпадає з сумою':`✕ ≠ Итого ${fmt(declared)}`;
+    } else { sumState.className='ok'; sumState.textContent='—'; }
+
+    // клики по чекбоксам
+    editor.querySelectorAll('.box[data-toggle]').forEach(b=>{
+      b.addEventListener('mousedown',e=>{
+        e.preventDefault();
+        const i=+b.dataset.toggle;
+        lines[i]=lines[i].replace(/\[([ xX])\]/,(m,c)=>c.toLowerCase()==='x'?'[ ]':'[x]');
+        render();
+      });
+    });
+  }
+
+  // считываем правки обратно в lines: собираем текст каждого div по data-line
+  function syncFromDom(){
+    const divs = [...editor.querySelectorAll('[data-line]')];
+    if(divs.length){
+      // восстанавливаем «сырой» текст: берём textContent, но маркеры уже в нём (syn спаны)
+      const newLines = divs.map(d=>{
+        // клонируем, убираем чекбокс-квадрат и hr (они не текст)
+        const clone = d.cloneNode(true);
+        clone.querySelectorAll('.box,hr,.stamp').forEach(n=>n.remove());
+        return clone.textContent.replace(/\u00a0/g,' ').replace(/✓/g,'').trimEnd();
+      });
+      lines = newLines;
+    }
+  }
+
+  // débounce перерисовки после ввода
+  let t=null;
+  editor.addEventListener('input',()=>{
+    clearTimeout(t);
+    t=setTimeout(()=>{ syncFromDom(); render(); },500);
+  });
+
+  // переключение режима
+  document.querySelectorAll('.mode').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.mode').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const mode=btn.dataset.mode;
+      app.setAttribute('data-view',mode);
+      hint.innerHTML = HINTS[mode];
+    });
+  });
+
+  app.setAttribute('data-view','live');
+  hint.innerHTML = HINTS.live;
+  render();
+})();
+</script>

@@ -242,11 +242,12 @@ export function render(text){
   const add = v => { total += v; sectionSum += v; };
   const sections = [];                         // [{declared, sum}] — по одному на строку «Итого»
   let lastTotal = null;                        // сумма ближайшего сверху «Итого» — для шаблона [кільк. од.]
-  // Шаблон [4000 шт] / [4000 компл] → (сумма/кол-во грн/ед). База — ближайшее «Итого».
+  // Шаблон [4000 шт] / [4,2 м.п.] → (сумма/кол-во грн/ед). База — ближайшее «Итого».
+  // Кол-во может быть дробным (точка или запятая): [4.2 м.п.], [1 000,5 кг].
   const perUnitExpand = (h, base) => h.replace(
-    /\[\s*(\d[\d\s]*)\s*([^\]\d\s][^\]]*?)\s*\]/g,
+    /\[\s*(\d[\d\s]*(?:[.,]\d+)?)\s*([^\]\d\s][^\]]*?)\s*\]/g,
     (mm, q, unit) => {
-      const qty = parseInt(q.replace(/\s/g,''), 10);
+      const qty = parseFloat(q.replace(/\s/g,'').replace(',', '.'));
       if(!qty || base == null) return mm;
       return `<span class="per-unit">(${fmtNum(base / qty)} ${LOCALE.currency}/${unit.trim()})</span>`;
     });
