@@ -43,6 +43,7 @@ export const LOCALE = {
   section:    'секции',   // слово в подытоге секции: «Σ секции N»
   client:     'клиент',   // роль в цитате клиента: «> @Имя»
   unclosed:   'Блок /* открыт в строке {n} и не закрыт — всё ниже скрыто',
+  internal:   'внутренние расчёты',   // подпись свёрнутого /* */ чипа «🙈 …»
   // Спец-имена переменных денежной петли (Э1.3): локализуемы, EN-алиасы
   // ('pay', 'deposit', 'valid until', 'email') работают всегда.
   payVar:     'оплата',          // [оплата] = <url> → кнопка «Оплатить» в экспорте
@@ -267,14 +268,28 @@ export function inline(text){
   return { html: s, sum };
 }
 
-// Полный рендер текста -> {html, stats}
+// Текст заголовка без инлайн-разметки — для свёрнутой шапки секции и ключа фолда.
+function stripInline(s){
+  return s.replace(/\*\*([^*]+)\*\*/g,'$1')
+    .replace(/==\s*([^=]+?)\s*==/g,'$1')
+    .replace(/~~([^~]+)~~/g,'$1')
+    .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g,'$1$2')
+    .replace(/`([^`]+)`/g,'$1')
+    .trim();
+}
+
+// Полный рендер текста -> {html, blocks, stats}
 // opts.mode === 'export' — санитайз-режим для документов наружу (см. EXPORT выше).
+// blocks[] — по одному на верхнеуровневый узел, с метаданными (sum/done/checks/rows/
+// declared/level/title) для компактного вида: groupBlocks() строит дерево секций и
+// сворачивает их БЕЗ повторного парсинга (порт из рабочего референса BitrixUI).
 export function render(text, opts){
   const lines = text.split('\n');
   EXPORT = !!(opts && opts.mode === 'export');
   VARS = {};                                   // переменные [имя] — заново на каждый рендер
   SVARS = {};                                  // строковые — тоже
-  let html = '', total = 0, checksTotal = 0, checksDone = 0, positions = 0;
+  const blocks = [];                           // [{html, line, kind, level, sum, …}]
+  let total = 0, checksTotal = 0, checksDone = 0, positions = 0;
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
   const add = v => { total += v; sectionSum += v; };
   const sections = [];                         // [{declared, sum}] — по одному на строку «Итого»
@@ -297,7 +312,12 @@ export function render(text, opts){
   // data-line: номер строки источника на каждом блоке — якоря для синхронного
   // скролла редактор ↔ рендер (см. main.js).
   let curLine = 0;
-  const emit = h => { if(!hidden) html += h.replace(/^<([a-zA-Z][a-zA-Z0-9]*)/, `<$1 data-line="${curLine}"`); };
+  const emit = (h, kind, meta) => {
+    if(hidden) return;
+    const html = h.replace(/^<([a-zA-Z][a-zA-Z0-9]*)/, `<$1 data-line="${curLine}"`);
+    blocks.push({ html, line: curLine, kind: kind || '', level: 0, sum: 0, done: 0,
+      checks: 0, rows: 0, declared: null, title: '', titleHtml: '', count: 0, ...(meta || {}) });
+  };
 
   // строка таблицы: начинается и кончается «|» и содержит хотя бы 2 «|»
   const isTableRow = t => t.startsWith('|') && t.endsWith('|') && (t.match(/\|/g)||[]).length >= 2;
@@ -311,7 +331,22 @@ export function render(text, opts){
 
     // границы блока: «/*» открывает (хвост строки — метка, можно писать зачем прячем)
     if(!hiddenBlock && /^\/\*/.test(raw)){ hiddenBlock = true; blockStart = lineIdx; continue; }
-    if(hiddenBlock && /^\*\/$/.test(raw)){ hiddenBlock = false; continue; }
+    if(hiddenBlock && /^\*\/$/.test(raw)){
+      hiddenBlock = false; hidden = false;
+      // В рабочем виде показываем сворачиваемый чип «🙈 внутренние расчёты (N)» —
+      // автор видит, что себестоимость на месте и считается. В EXPORT — молчок.
+      if(!EXPORT){
+        const body = lines.slice(blockStart + 1, lineIdx).map(x => x.trim()).filter(Boolean);
+        curLine = blockStart;
+        emit('<details class="r-hidden"><summary class="r-hidden-head">'
+           + '<span class="r-hidden-eye" aria-hidden="true">🙈</span>'
+           + `<span class="r-hidden-label">${esc(LOCALE.internal || 'внутренние расчёты')}</span>`
+           + `<span class="r-hidden-n">(${body.length})</span></summary>`
+           + `<div class="r-hidden-body">${body.map(l => esc(l)).join('<br>')}</div></details>`,
+          'hidden', { count: body.length });
+      }
+      continue;
+    }
     const hiddenLine = /^\/\//.test(raw);
     hidden = hiddenBlock || hiddenLine;
     // дальше строка разбирается без маркера «//» — как обычная
@@ -329,14 +364,14 @@ export function render(text, opts){
         j++;
       }
       if(rows.length){
-        let tb = '<table class="r-table">';
+        let tb = '<table class="r-table">', tsum = 0;
         rows.forEach((rowLine, ri) => {
           const cells = rowLine.slice(1, -1).split('|').map(c => c.trim());
           tb += ri === 0 ? '<tr class="r-tr-head">' : '<tr>';
-          for(const c of cells){ const r = inline(c); add(r.sum); tb += `<td>${r.html}</td>`; }
+          for(const c of cells){ const r = inline(c); add(r.sum); tsum += r.sum; tb += `<td>${r.html}</td>`; }
           tb += '</tr>';
         });
-        emit(tb + '</table>');
+        emit(tb + '</table>', 'table', { rows: Math.max(0, rows.length - 1), sum: tsum });
       }
       lineIdx = j - 1;
       continue;
@@ -368,13 +403,13 @@ export function render(text, opts){
               + '</div>';
       }
       card += `<div class="r-quote-body">${qlines.join('<br>')}</div>`;
-      emit(card + '</blockquote>');
+      emit(card + '</blockquote>', 'quote');
       lineIdx = j - 1;
       continue;
     }
 
-    if(/^={3,}$/.test(t)){ emit('<hr class="r-hr2">'); continue; }
-    if(/^-{3,}$/.test(t)){ emit('<hr class="r-hr">'); continue; }
+    if(/^={3,}$/.test(t)){ emit('<hr class="r-hr2">', 'rule'); continue; }
+    if(/^-{3,}$/.test(t)){ emit('<hr class="r-hr">', 'rule'); continue; }
 
     let m;
     // Объявление переменной: [имя] = выражение (без валюты и без хвостовой «=»).
@@ -394,7 +429,7 @@ export function render(text, opts){
                     ? ` <span class="calc-eq">=</span> <span class="var-formula">${refsToHtml(rhs)}</span>`
                       + ` <span class="calc-eq">→</span> <span class="var-val">${fmtVar(val)}</span>`
                     : ` <span class="calc-eq">=</span> <span class="var-val">${fmtVar(val)}</span>`)
-                + `</div>`);
+                + `</div>`, 'var');
         }
         continue;
       }
@@ -407,7 +442,7 @@ export function render(text, opts){
         // EXPORT: объявление — внутренняя кухня (url уйдёт кнопкой, не строкой)
         if(!EXPORT){
           emit(`<div class="r-var"><span class="var-name">[${esc(name)}]</span>`
-                + ` <span class="calc-eq">=</span> <span class="var-str">${esc(sval)}</span></div>`);
+                + ` <span class="calc-eq">=</span> <span class="var-str">${esc(sval)}</span></div>`, 'var');
         }
         continue;
       }
@@ -415,7 +450,8 @@ export function render(text, opts){
     }
     if(m = t.match(/^(#{1,3})\s+(.*)$/)){
       const r = inline(m[2]); add(r.sum);
-      emit(`<div class="r-h${m[1].length}">${r.html}</div>`); continue;
+      emit(`<div class="r-h${m[1].length}">${r.html}</div>`, `h${m[1].length}`,
+        { level: m[1].length, title: stripInline(m[2]), titleHtml: r.html, sum: r.sum }); continue;
     }
     if(m = t.match(/^\[([ xX])\]\s*(.*)$/)){
       const done = m[1].toLowerCase() === 'x';
@@ -426,7 +462,7 @@ export function render(text, opts){
             + `<span class="box">${done?ICO.check:''}</span>`
             + `<span class="txt">${r.html}</span>`
             + (done?`<span class="stamp">(${LOCALE.done})</span>`:'')
-            + `</div>`);
+            + `</div>`, 'check', { done: done ? 1 : 0, checks: 1, sum: r.sum });
       continue;
     }
     if(m = t.match(/^(!!?)\s+(.*)$/)){
@@ -434,7 +470,7 @@ export function render(text, opts){
       const strong = m[1] === '!!';
       emit(`<div class="r-callout${strong?' strong':''}">`
             + `<span class="r-callout-ico">${strong?ICO.danger:ICO.warn}</span>`
-            + `<span>${r.html}</span></div>`); continue;
+            + `<span>${r.html}</span></div>`, 'callout', { sum: r.sum }); continue;
     }
     if(m = t.match(RE.totalLine)){
       const rest = m[3];
@@ -456,7 +492,7 @@ export function render(text, opts){
       const parts = [`<b>${m[1]}${m[2]||''}</b>`];
       if(restHtml.trim()) parts.push(restHtml);
       parts.push(fb);
-      emit(`<div class="r-total">${parts.join(' ')}</div>`);
+      emit(`<div class="r-total">${parts.join(' ')}</div>`, 'total', { declared: declaredHere });
       sections.push({ declared: declaredHere, sum: sec });
       lastTotal = effTotal;                     // для [кільк.] на следующих строках
       sectionSum = 0;                           // начинаем новую секцию
@@ -464,23 +500,25 @@ export function render(text, opts){
     }
     if(m = t.match(/^(\d+)\.\s+(.*)$/)){
       const r = inline(m[2]); add(r.sum);
-      emit(`<div class="r-num">${m[1]}. ${r.html}</div>`); continue;
+      emit(`<div class="r-num">${m[1]}. ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
     if(m = t.match(/^[-*]\s+(.*)$/)){
       const r = inline(m[1]); add(r.sum);
-      emit(`<div class="r-li">${r.html}</div>`); continue;
+      emit(`<div class="r-li">${r.html}</div>`, 'li', { sum: r.sum }); continue;
     }
     const r = inline(t); add(r.sum);
     // обычный текст — без маркера списка; [кільк.] раскрывается по ближайшему «Итого»
-    emit(`<div class="r-p">${perUnitExpand(r.html, lastTotal)}</div>`);
+    emit(`<div class="r-p">${perUnitExpand(r.html, lastTotal)}</div>`, 'text', { sum: r.sum });
   }
 
   // «/*» без пары спрятал бы весь хвост заметки молча — говорим об этом вслух.
   // В EXPORT молчим: предупреждение — для автора, а не для клиента.
   if(hiddenBlock && !EXPORT){
+    hidden = false; curLine = blockStart;
     const msg = String(LOCALE.unclosed || '').replace('{n}', blockStart + 1);
-    html += `<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`;
+    emit(`<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`, 'callout');
   }
+  const html = blocks.map(b => b.html).join('');
 
   // объявленные "Итого" (может быть несколько секций) — суммируем все
   let declared = null, declaredSum = 0, hasDeclared = false;
@@ -520,6 +558,7 @@ export function render(text, opts){
 
   return {
     html,
+    blocks,
     stats: { total, checksTotal, checksDone, positions, declared, sections, pay },
     checkLineMap,
     fmt
@@ -527,3 +566,58 @@ export function render(text, opts){
 }
 
 export { fmt };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// СВОРАЧИВАНИЕ СЕКЦИЙ (компактный вид, порт из BitrixUI/specEngine). Заголовок
+// #/##/### владеет всем до следующего заголовка того же/высшего уровня; свод (roll)
+// по потомкам даёт «деньги/чек-боксы/параметры» для свёрнутой шапки без повторного
+// парсинга. Состояние свёрнутости — вне текста (localStorage в main.js), формат
+// .md о нём не знает. Строку-подпись шапки строит main.js (локализация).
+// ─────────────────────────────────────────────────────────────────────────────
+function addRoll(r, b){
+  r.sum += b.sum; r.done += b.done; r.checks += b.checks; r.rows += b.rows; r.blocks += 1;
+  if(b.kind === 'total' && b.declared != null) r.declared = (r.declared ?? 0) + b.declared;
+}
+// blocks[] -> дерево узлов: {block} | {section:{key,header,level,children,roll}}.
+// Ключ секции — текст заголовка (при повторах — суффикс #N): стабилен к правкам выше.
+export function groupBlocks(blocks){
+  const root = [];
+  const stack = [];
+  const seen = new Map();
+  for(const b of blocks){
+    const lvl = b.level;
+    if(lvl > 0){
+      while(stack.length && stack[stack.length - 1].level >= lvl) stack.pop();
+      for(const anc of stack) addRoll(anc.roll, b);
+      const base = b.title || `h${lvl}`;
+      const n = seen.get(base) ?? 0; seen.set(base, n + 1);
+      const key = n ? `${base}#${n}` : base;
+      const sec = { key, header: b, level: lvl, children: [],
+        roll: { sum: 0, done: 0, checks: 0, rows: 0, blocks: 0, declared: null } };
+      (stack.length ? stack[stack.length - 1].children : root).push({ section: sec });
+      stack.push(sec);
+    } else {
+      for(const anc of stack) addRoll(anc.roll, b);
+      (stack.length ? stack[stack.length - 1].children : root).push({ block: b });
+    }
+  }
+  return root;
+}
+// Ключи всех секций (для «свернуть всё»).
+export function allSectionKeys(nodes, out = []){
+  for(const n of nodes)
+    if(n.section){ out.push(n.section.key); allSectionKeys(n.section.children, out); }
+  return out;
+}
+// Ключи «длинных» секций — эвристика первого открытия на телефоне: вложенная
+// (##/###) секция > 10 блоков или таблица > 4 рядов сворачивается по умолчанию.
+// Секции 1-го уровня не трогаем — иначе спрячется весь документ.
+export function longSectionKeys(nodes, out = []){
+  for(const n of nodes)
+    if(n.section){
+      if(n.section.level >= 2 && (n.section.roll.blocks > 10 || n.section.roll.rows > 4))
+        out.push(n.section.key);
+      longSectionKeys(n.section.children, out);
+    }
+  return out;
+}

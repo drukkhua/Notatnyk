@@ -1,4 +1,4 @@
-import { render, setLocale, LOCALE } from './parser.js';
+import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys } from './parser.js';
 import { I18N, LANGS } from './i18n.js';
 
 // --- fs через глобальный Tauri API (withGlobalTauri) ---
@@ -230,14 +230,115 @@ function select(id){
   currentId = id;
   const n = current();
   src.value = n ? n.body : '';
+  loadFolds();            // свёрнутость этой заметки (localStorage), до первого paint
   drawList();
   paint();
 }
 
+// ── Компактный вид: дерево секций + свёрнутость (порт из BitrixUI) ───────────
+// Состояние свёрнутости живёт в localStorage (per-note), НЕ в .md — формат чист.
+let renderTree = [];          // groupBlocks(blocks) текущей заметки
+let currentFolds = new Set(); // ключи свёрнутых секций
+let foldsStored = false;      // есть ли явно сохранённое состояние для этой заметки
+let foldsInit = false;        // применили ли дефолт (моб-эвристика) для этой заметки
+let lastCheckMap = [];        // checkLineMap последнего рендера (для клика по чек-боксу)
+
+const foldKey = () => currentId ? `notatnyk.folds.${currentId}` : null;
+function loadFolds(){
+  currentFolds = new Set(); foldsStored = false; foldsInit = false;
+  const k = foldKey(); if(!k) return;
+  try{ const raw = localStorage.getItem(k);
+    if(raw != null){ currentFolds = new Set(JSON.parse(raw)); foldsStored = true; } }catch{}
+}
+function saveFolds(){
+  const k = foldKey(); if(!k) return;
+  try{ localStorage.setItem(k, JSON.stringify([...currentFolds])); foldsStored = true; }catch{}
+}
+// Дефолт при первом показе заметки: телефон — длинные секции свёрнуты; десктоп — всё открыто.
+function applyFoldDefaults(){
+  if(foldsInit) return;
+  foldsInit = true;
+  if(foldsStored) return;                       // у пользователя явное состояние
+  const mobile = window.matchMedia('(max-width:640px)').matches;
+  currentFolds = new Set(mobile ? longSectionKeys(renderTree) : []);
+}
+
+// Подпись свёрнутой шапки: «1/4 ✓ · Итого: N грн» / «▦ 7» (локализовано валютой/словом).
+function sectionSummaryText(roll){
+  const parts = [];
+  if(roll.checks > 0) parts.push(`${roll.done}/${roll.checks} ✓`);
+  const money = roll.declared != null && roll.declared > 0 ? roll.declared : (roll.sum > 0 ? roll.sum : 0);
+  const nf = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  if(money > 0) parts.push(`${LOCALE.total}: ${nf(money)} ${LOCALE.currency}`);
+  else if(roll.rows > 0) parts.push(`▦ ${roll.rows}`);
+  return parts.join(' · ');
+}
+
+// Дерево узлов → HTML. Подряд идущие блоки — как есть (сохраняем делегирование
+// кликов и data-line); секция — обёртка с кликабельной шапкой и (если не свёрнута) телом.
+function renderNodesHtml(nodes){
+  let h = '';
+  for(const n of nodes){
+    if(n.block){ h += n.block.html; continue; }
+    const sec = n.section;
+    const col = currentFolds.has(sec.key);
+    h += `<section class="r-sec lvl${sec.level}${col?' collapsed':''}">`
+      + `<div class="r-sec-head r-h${sec.level}" data-fold="${encodeURIComponent(sec.key)}"`
+      + ` data-line="${sec.header.line}" role="button" tabindex="0" aria-expanded="${!col}">`
+      + '<span class="r-sec-caret" aria-hidden="true"></span>'
+      + `<span class="r-sec-title">${sec.header.titleHtml}</span>`
+      + (col ? `<span class="r-sec-sum">${sectionSummaryText(sec.roll)}</span>` : '')
+      + '</div>'
+      + (col ? '' : `<div class="r-sec-body">${renderNodesHtml(sec.children)}</div>`)
+      + '</section>';
+  }
+  return h;
+}
+
+function toggleFold(key){
+  if(currentFolds.has(key)) currentFolds.delete(key); else currentFolds.add(key);
+  saveFolds();
+  drawRender(); collectAnchors(); updateFoldAllBtn();
+}
+
+// Отрисовать рендер из дерева + навесить обработчики (чек-боксы, шапки секций).
+function drawRender(){
+  out.innerHTML = renderNodesHtml(renderTree);
+  out.querySelectorAll('.r-check').forEach(node=>{
+    node.onclick = ()=>{
+      const idx = +node.dataset.check;
+      const lineNo = lastCheckMap[idx];
+      const lines = src.value.split('\n');
+      lines[lineNo] = lines[lineNo].replace(/\[([ xX])\]/,(m,ch)=>
+        ch.toLowerCase()==='x' ? '[ ]' : '[x]');
+      src.value = lines.join('\n');
+      persist(); paint();
+    };
+  });
+  out.querySelectorAll('.r-sec-head').forEach(head=>{
+    const key = decodeURIComponent(head.dataset.fold);
+    head.onclick = ()=> toggleFold(key);
+    head.onkeydown = (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleFold(key); } };
+  });
+}
+
+function updateFoldAllBtn(){
+  const btn = $('#foldAllBtn'); if(!btn) return;
+  const keys = allSectionKeys(renderTree);
+  if(!keys.length){ btn.hidden = true; return; }
+  btn.hidden = false;
+  const anyCollapsed = keys.some(k => currentFolds.has(k));
+  btn.textContent = anyCollapsed ? t('expandAll') : t('collapseAll');
+}
+
 function paint(){
   const text = src.value;
-  const { html, stats, checkLineMap } = render(text);
-  out.innerHTML = html;
+  const { stats, checkLineMap, blocks } = render(text);
+  lastCheckMap = checkLineMap;
+  renderTree = groupBlocks(blocks);
+  applyFoldDefaults();
+  drawRender();
+  updateFoldAllBtn();
 
   docTitle.textContent = titleFrom(text);
   if(stats.checksTotal>0){
@@ -268,19 +369,6 @@ function paint(){
     sumState.className = 'ok';
     sumState.textContent = '—';
   }
-
-  // клики по чекбоксам
-  out.querySelectorAll('.r-check').forEach(node=>{
-    node.onclick = ()=>{
-      const idx = +node.dataset.check;
-      const lineNo = checkLineMap[idx];
-      const lines = src.value.split('\n');
-      lines[lineNo] = lines[lineNo].replace(/\[([ xX])\]/,(m,ch)=>
-        ch.toLowerCase()==='x' ? '[ ]' : '[x]');
-      src.value = lines.join('\n');
-      persist(); paint();
-    };
-  });
 
   updateGutter();      // номера строк — под новую геометрию текста
   collectAnchors();    // якоря синк-скролла — по свежему рендеру
@@ -1075,6 +1163,12 @@ $('#delBtn').onclick = deleteCurrent;
 $('#docBtn').onclick = ()=> applyDocMode(!out.classList.contains('doc-mode'));
 $('#exportBtn').onclick = exportNote;
 $('#fontBtn').onclick = openDocDlg;
+$('#foldAllBtn').onclick = ()=>{
+  const keys = allSectionKeys(renderTree);
+  const anyCollapsed = keys.some(k => currentFolds.has(k));
+  currentFolds = new Set(anyCollapsed ? [] : keys);
+  saveFolds(); drawRender(); collectAnchors(); updateFoldAllBtn();
+};
 $('#docDlgClose').onclick = ()=>{ $('#docDlg').hidden = true; };
 $('#docDlg').onclick = (e)=>{ if(e.target === $('#docDlg')) $('#docDlg').hidden = true; };
 document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
