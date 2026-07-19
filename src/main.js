@@ -597,7 +597,7 @@ function buildSyntax(){
     {                       w:`… [${t('exVar')}] …`,                                g:t('sVarRef') },
     { ico:'calc',           ins:'2*3=', sel:'2*3',      w:'55*3+(2.5+3.5)*2=',    g:t('sCalc') },
     {                       w:`18400/1200*1125= ${cur}`,                          g:t('sCalcPrice') },
-    { btn:`= ${cur}`,       ins:`= 0 ${cur}`, sel:'0',  w:`= 12 450 ${cur}`,      g:t('sPrice') },
+    { btn:`= ${cur}`,       ins:`= 0 ${cur}`, sel:'0',  w:`= / : 12 450 ${cur}`,  g:t('sPrice') },
     {                       w:`2490 ${cur} / - 2490 ${cur}`,                      g:t('sPriceOther') },
     { btn:`${cur}/${unit}`, ins:` ${cur}/${unit}`,      w:`${cur}/${unit}`,       g:t('sPerUnit') },
     { btn:tot,              block:`${tot}  ${cur}`, caret:` ${cur}`,

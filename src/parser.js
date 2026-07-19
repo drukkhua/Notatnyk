@@ -61,14 +61,16 @@ function buildPatterns(){
   const unit = escRe(LOCALE.unit || 'шт');
   const tot  = escRe(LOCALE.total || 'Итого');
   const uSfx = `(\\.?\\s*\\/\\s*${unit}\\.?)`;                 // «/шт», «./шт.»
-  RE.price     = new RegExp(`([.,]?)(=\\s*)?(\\d[\\d\\s]*)\\s*${cur}${uSfx}?${NL}`, 'gi');
+  // Цена «в Σ»: перед числом может стоять «=» ИЛИ «:» — оба дают тот же результат
+  // (сумма идёт в Σ). Калькулятор формул (RE.calc) — только «=», не трогаем.
+  RE.price     = new RegExp(`([.,]?)([=:]\\s*)?(\\d[\\d\\s]*)\\s*${cur}${uSfx}?${NL}`, 'gi');
   RE.calc      = new RegExp(`((?:\\[[^\\]]+\\]|[0-9])(?:\\[[^\\]]+\\]|[0-9.,()+\\-*/%^\\s])*?)\\s*=(\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.totalLine = new RegExp(`^(${tot})${NL}\\s*(:?)\\s*(.*)$`, 'i');
   RE.declared  = new RegExp(`${tot}${NL}\\s*:?\\s*(\\d[\\d\\s]*)`, 'gi');
-  RE.posPrice  = new RegExp(`=\\s*[\\d][\\d\\s]*\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
+  RE.posPrice  = new RegExp(`[=:]\\s*[\\d][\\d\\s]*\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
-  RE.varRef    = new RegExp(`(=\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
-  RE.posVar    = new RegExp(`=\\s*\\[([^\\]]+)\\]\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
+  RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
+  RE.posVar    = new RegExp(`[=:]\\s*\\[([^\\]]+)\\]\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
 }
 buildPatterns();
 // Применить новые значения ключевых слов (частичный патч) и пересобрать регулярки.
@@ -195,11 +197,12 @@ export function inline(text){
     const v = parseInt(n.replace(/\s/g,''),10)||0;
     // "грн/шт", "грн./шт." — цена за штуку: показываем, но НЕ суммируем в Σ.
     if(unit) return `<span class="price-other">${fmt(v)} ${C}${unit}</span>`;
-    // eq (группа 2) непусто, только если перед числом реально был "=".
-    // Пробел «жуётся» лишь после "=", поэтому пробел перед обычной ценой сохраняется.
+    // eq (группа 2) непусто, только если перед числом реально был "=" или ":".
+    // Показываем ровно тот символ, что ввёл автор (":" остаётся ":", "=" — "=").
     if(eq){
       sum += v;
-      return `<span class="calc-eq">=</span> <span class="price-sum">${fmt(v)} ${C}</span>`;
+      const op = eq.trim() || '=';
+      return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmt(v)} ${C}</span>`;
     }
     return `<span class="price-other">${fmt(v)} ${C}</span>`;
   });
@@ -251,7 +254,8 @@ export function inline(text){
       if(unit) return `<span class="price-other">${fmtNum(v)} ${C}${unit}</span>`;
       if(eq){
         sum += Math.round((v + Number.EPSILON) * 100) / 100;
-        return `<span class="calc-eq">=</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
+        const op = eq.trim() || '=';
+        return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
       }
       return `<span class="price-other">${fmtNum(v)} ${C}</span>`;
     }
@@ -529,10 +533,14 @@ export function render(text, opts){
   }
   if(hasDeclared) declared = declaredSum;
 
-  positions = (text.match(RE.posPrice)||[]).length     // цены = N грн (кроме /шт)
-            + (text.match(RE.posCalc)||[]).length;      // калькулятор = грн (кроме /шт)
+  // Считаем позиции по тексту БЕЗ строк «Итого» — теперь, когда «:» тоже цена в Σ,
+  // строка «Итого: N грн» иначе засчиталась бы как отдельная позиция (её сумма
+  // учитывается отдельно, как сверка секции, а не как позиция).
+  const countText = lines.filter(l => !RE.totalLine.test(l.trim())).join('\n');
+  positions = (countText.match(RE.posPrice)||[]).length // цены =/: N грн (кроме /шт)
+            + (countText.match(RE.posCalc)||[]).length;  // калькулятор = грн (кроме /шт)
   RE.posVar.lastIndex = 0;
-  for(const mm of text.matchAll(RE.posVar))             // = [переменная] грн (кроме /шт)
+  for(const mm of countText.matchAll(RE.posVar))         // =/: [переменная] грн (кроме /шт)
     if(VARS[mm[1].trim()] != null) positions++;
 
   // Метаданные денежной петли (Э1.3): спец-переменные → кнопки «Принять/Оплатить»
