@@ -27,6 +27,8 @@ const stat    = (path, options) => invoke('plugin:fs|stat',     { path, options 
 // Диалог выбора папки (плагин dialog). Возвращает путь или null.
 const pickFolder = () => invoke('plugin:dialog|open',
   { options: { directory: true, multiple: false, title: t('folderTitle') } });
+// Диалог сохранения файла (тот же плагин). Возвращает путь или null.
+const saveDialog = (options) => invoke('plugin:dialog|save', { options });
 
 const DIR = 'notatnyk';            // папка по умолчанию внутри AppData
 const base = { baseDir: BaseDirectory.AppData };
@@ -794,6 +796,88 @@ function createTable(){
   insertBlock(text);
 }
 
+// ── Экспорт «Отдать клиенту» (Э1.2 + Э1.4) ──────────────────────────────────
+// Санитайз — В ДВИЖКЕ (render mode:'export'): формулы, объявления переменных и
+// скрытые строки/блоки в html не попадают по построению, не пост-обработкой.
+// Файл самодостаточен: стили инлайном, печать/PDF — кнопкой window.print().
+
+// Быстрый строковый хеш (djb2) — штамп «#hash» в футере документа. Не крипта:
+// подписанный штамп (Ed25519) появится отдельной Rust-командой (Э1.3).
+function shortHash(s){
+  let h = 5381;
+  for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
+// Добавка к styles.css для автономной страницы: центрируем «лист», плавающая
+// кнопка печати, чистые поля при печати. Тема — всегда светлая (документ).
+const EXPORT_CSS = `
+body.export{overflow:auto;background:#eef0f4;}
+body.export .rendered{display:block;max-width:820px;margin:28px auto 0;min-height:auto;
+  box-shadow:0 2px 26px rgba(15,19,27,.10);border-radius:12px;}
+body.export .r-check{cursor:default;pointer-events:none;}
+.exp-foot{max-width:820px;margin:12px auto 90px;padding:0 10px;display:flex;
+  justify-content:space-between;gap:12px;flex-wrap:wrap;
+  color:#8b93a1;font-size:12px;font-family:ui-sans-serif,system-ui,sans-serif;}
+.exp-foot b{color:#5b6577;}
+.exp-print{position:fixed;right:20px;bottom:20px;padding:11px 18px;border:0;border-radius:10px;
+  background:#2f6df0;color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+  font-family:ui-sans-serif,system-ui,sans-serif;box-shadow:0 6px 20px rgba(47,109,240,.35);}
+@media print{
+  .exp-print{display:none;}
+  body.export{background:#fff;}
+  body.export .rendered{box-shadow:none;border-radius:0;max-width:none;margin:0;padding:0;}
+  .exp-foot{margin:10px 0 0;}
+}`;
+
+async function exportNote(){
+  const n = current(); if(!n) return;
+  const text = src.value;
+  const { html } = render(text, { mode: 'export' });   // санитайз по построению
+  paint();  // render() с export-режимом сбросил внутренний флаг общей паинт-цепочки
+  const title = titleFrom(text);
+  const stamp = `${dateStr(true)} · #${shortHash(text)}`;
+  let css = '';
+  try{ css = await (await fetch('styles.css')).text(); }catch{}
+  const page = `<!DOCTYPE html>
+<html lang="${lang}" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>${css}\n${EXPORT_CSS}</style>
+</head>
+<body class="export">
+<article class="rendered doc-mode">${html}</article>
+<footer class="exp-foot">
+  <span>${escapeHtml(title)} · ${stamp}</span>
+  <span>${t('exportedWith')} <b>Σ Notatnyk</b></span>
+</footer>
+<button class="exp-print" onclick="window.print()">${t('printHint')}</button>
+</body>
+</html>`;
+  let path;
+  try{
+    path = await saveDialog({
+      defaultPath: `${title.replace(/[\\/:*?"<>|]/g, '_')}.html`,
+      title: t('exportTitle'),
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    });
+  }catch{ return; }
+  if(!path) return;
+  try{ await writeTextFile(path, page, {}); }
+  catch(e){ alert(`${t('exportErr')}: ${e}`); }
+}
+
+// Тумблер «Документ» — чисто визуальный пресет рендера, состояние в localStorage
+const DOCMODE_KEY = 'notatnyk.docmode';
+function applyDocMode(on){
+  out.classList.toggle('doc-mode', on);
+  $('#docBtn').classList.toggle('active', on);
+  try{ localStorage.setItem(DOCMODE_KEY, on ? '1' : ''); }catch{}
+  collectAnchors();                     // геометрия блоков изменилась — якоря заново
+}
+
 // --- настройки языка / ключевых слов ---
 function fillLocaleForm(v){
   locCurrency.value = v.currency; locTotal.value = v.total;
@@ -872,6 +956,8 @@ for(const b of localeDlg.querySelectorAll('[data-lang]'))
 $('#folderBtn').onclick = chooseFolder;
 $('#newBtn').onclick = newNote;
 $('#delBtn').onclick = deleteCurrent;
+$('#docBtn').onclick = ()=> applyDocMode(!out.classList.contains('doc-mode'));
+$('#exportBtn').onclick = exportNote;
 
 // --- перетаскиваемый разделитель редактора/рендера ---
 (function initSplitter(){
@@ -971,6 +1057,7 @@ async function seed(){
   try{
     await loadConfig();               // читает lang + ручные правки ключевых слов
     applyLang(lang, kwOverrides);     // язык интерфейса + движок + тулбар/шпаргалка
+    try{ if(localStorage.getItem(DOCMODE_KEY) === '1') applyDocMode(true); }catch{}
     await loadAll();
     select(currentId);
   }catch(e){

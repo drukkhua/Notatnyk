@@ -67,6 +67,15 @@ buildPatterns();
 // Применить новые значения ключевых слов (частичный патч) и пересобрать регулярки.
 export function setLocale(patch){ Object.assign(LOCALE, patch || {}); buildPatterns(); }
 
+// --- режим экспорта (Э1.2 «санитайз по построению») ---
+// EXPORT=true: наружу уходят только РЕЗУЛЬТАТЫ. Формулы калькулятора не
+// печатаются, объявления переменных не эмитятся (но вычисляются — Σ честная),
+// служебные предупреждения не показываются. Скрытые строки '//' и блоки
+// '/* */' не попадают в html в любом режиме — это уже гарантирует hidden-флаг.
+// ВАЖНО (Э2): строковые переменные ([оплата]=url и т.п.) при их появлении тоже
+// обязаны не эмитеться в EXPORT — маршрут через ту же ветку RE_VARDEF.
+let EXPORT = false;
+
 // --- переменные [имя] = формула, ссылка [имя] в формулах ---
 let VARS = {};                                     // текущие переменные (заполняется в render())
 const RE_VARDEF = /^\[([^\]=\n]+)\]\s*=\s*(.+)$/;  // объявление: [имя] = выражение
@@ -188,7 +197,7 @@ export function inline(text){
   // дважды. Требуется оператор или скобки (одиночное «123=» не трогаем). Формула
   // в исходнике не меняется. Если сразу за «=» стоит «грн» — результат становится
   // ценой в Σ (синий чип) и попадает в сумму, как обычные цены с «=».
-  s = s.replace(RE.calc, (m, e, grn, unit) => {
+  s = s.replace(RE.calc, (m, e, grn, unit, offset, whole) => {
     // требуется реальная операция (оператор/скобки или вычитание между числами/ссылками)
     if(!/[+*/%^()]/.test(e) && !/[\d\]]\s*-\s*[\d\[]/.test(e)) return m;
     const { numeric, unknown } = resolveRefs(e);
@@ -197,12 +206,21 @@ export function inline(text){
     if(r === null) return m;
     const formula = `<span class="calc-formula">${refsToHtml(e.trim())}</span>`;
     const eq = ` <span class="calc-eq">=</span> `;
+    // EXPORT: перед формулой в тексте часто уже стоит «=» («печать = 18400/…»).
+    // Формулу мы вырезаем — чтобы не получить «= =», свой знак не ставим, если
+    // предыдущий непробельный символ и так «=».
+    const eqBefore = EXPORT && /=\s*$/.test(whole.slice(0, offset));
+    const eqExp = eqBefore ? '' : '<span class="calc-eq">=</span> ';
     if(grn){
       // "грн/шт" — цена за штуку: показываем результат, но НЕ суммируем в Σ
-      if(unit) return `${formula}${eq}<span class="price-other">${fmtNum(r)} ${C}${unit}</span>`;
+      if(unit) return (EXPORT ? '' : formula + eq)
+                     + `<span class="price-other">${fmtNum(r)} ${C}${unit}</span>`;
       sum += Math.round((r + Number.EPSILON) * 100) / 100;
+      // EXPORT: формула вырезана по построению — клиент видит «= 17 250 грн»
+      if(EXPORT) return `${eqExp}<span class="price-sum">${fmtNum(r)} ${C}</span>`;
       return `${formula}${eq}<span class="price-sum">${fmtNum(r)} ${C}</span>`;
     }
+    if(EXPORT) return `<span class="calc-res">${fmtNum(r)}</span>`;
     return `${formula}${eq}<span class="calc-res">${fmtNum(r)}</span>`;
   });
 
@@ -234,8 +252,10 @@ export function inline(text){
 }
 
 // Полный рендер текста -> {html, stats}
-export function render(text){
+// opts.mode === 'export' — санитайз-режим для документов наружу (см. EXPORT выше).
+export function render(text, opts){
   const lines = text.split('\n');
+  EXPORT = !!(opts && opts.mode === 'export');
   VARS = {};                                   // переменные [имя] — заново на каждый рендер
   let html = '', total = 0, checksTotal = 0, checksDone = 0, positions = 0;
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
@@ -349,13 +369,16 @@ export function render(text){
       const val = unknown ? null : calc(numeric);
       if(name && val !== null && isFinite(val)){
         VARS[name] = val;
-        const isFormula = /[-+*/%^()]/.test(m[2]) || m[2].includes('[');
-        emit(`<div class="r-var"><span class="var-name">[${esc(name)}]</span>`
-              + (isFormula
-                  ? ` <span class="calc-eq">=</span> <span class="var-formula">${refsToHtml(rhs)}</span>`
-                    + ` <span class="calc-eq">→</span> <span class="var-val">${fmtVar(val)}</span>`
-                  : ` <span class="calc-eq">=</span> <span class="var-val">${fmtVar(val)}</span>`)
-              + `</div>`);
+        // EXPORT: объявление — внутренняя кухня, наружу не идёт (значения уже в VARS)
+        if(!EXPORT){
+          const isFormula = /[-+*/%^()]/.test(m[2]) || m[2].includes('[');
+          emit(`<div class="r-var"><span class="var-name">[${esc(name)}]</span>`
+                + (isFormula
+                    ? ` <span class="calc-eq">=</span> <span class="var-formula">${refsToHtml(rhs)}</span>`
+                      + ` <span class="calc-eq">→</span> <span class="var-val">${fmtVar(val)}</span>`
+                    : ` <span class="calc-eq">=</span> <span class="var-val">${fmtVar(val)}</span>`)
+                + `</div>`);
+        }
         continue;
       }
       // не валидное объявление — падаем в обычную обработку ниже
@@ -422,8 +445,9 @@ export function render(text){
     emit(`<div class="r-p">${perUnitExpand(r.html, lastTotal)}</div>`);
   }
 
-  // «/*» без пары спрятал бы весь хвост заметки молча — говорим об этом вслух
-  if(hiddenBlock){
+  // «/*» без пары спрятал бы весь хвост заметки молча — говорим об этом вслух.
+  // В EXPORT молчим: предупреждение — для автора, а не для клиента.
+  if(hiddenBlock && !EXPORT){
     const msg = String(LOCALE.unclosed || '').replace('{n}', blockStart + 1);
     html += `<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`;
   }
