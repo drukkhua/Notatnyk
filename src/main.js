@@ -929,9 +929,19 @@ const DOC_FONTS = {
     name:'fontSans', note:'fontSansNote',
     stack:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif' },
   grotesk: { // прямой нейтральный гротеск: Helvetica — классика деловой Америки,
-             // Arial (win), Liberation Sans (linux, метрический клон Arial)
+             // Arial (win), Liberation Sans (linux, метрический клон Arial).
+             // Шрифт №1 инвойсов США: QuickBooks поддерживает ровно его.
     name:'fontGrotesk', note:'fontGroteskNote',
     stack:'"Helvetica Neue",Helvetica,Arial,"Liberation Sans",Roboto,"Noto Sans",sans-serif' },
+  office: { // дефолт Word: Aptos (2023+) / Calibri (2007–2023) — «большинство
+            // офисов». Carlito — свободный метрический клон Calibri (linux).
+            // На mac без MS Office честно падает в Segoe/системный.
+    name:'fontOffice', note:'fontOfficeNote',
+    stack:'Aptos,Calibri,Carlito,"Segoe UI","Helvetica Neue",Arial,sans-serif' },
+  friendly: { // Trebuchet MS: тёплый гуманист, Win+mac с полной кириллицей —
+              // для «дружелюбных» сфер (клининг, газоны, переезды)
+    name:'fontFriendly', note:'fontFriendlyNote',
+    stack:'"Trebuchet MS","Segoe UI",Verdana,"DejaVu Sans",sans-serif' },
   // ── с засечками ──
   serif: {  // книжный документ: Charter (mac) / Cambria,Sitka (win) / PT+Noto (linux)
     name:'fontSerif', note:'fontSerifNote',
