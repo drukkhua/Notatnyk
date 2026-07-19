@@ -194,6 +194,7 @@ body.col-resizing{cursor:col-resize;user-select:none;}
 .var-name{color:var(--check);font-weight:800;}
 .var-formula{color:var(--formula);}            /* формула — светлее основного текста */
 .var-val,.var-ref{color:var(--check);font-weight:800;}  /* значение/ссылка — жирно-синим */
+.var-str{color:var(--sum-tx);font-weight:600;word-break:break-all;} /* строковая переменная (url, реквизиты) */
 .calc-formula{color:var(--formula);}           /* вычисляемая формула — светлее основного текста */
 .calc-eq{color:var(--ink);}                    /* знаки «=» и «→» — цветом основного текста */
 

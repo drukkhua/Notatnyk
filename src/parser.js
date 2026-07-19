@@ -43,6 +43,12 @@ export const LOCALE = {
   section:    'секции',   // слово в подытоге секции: «Σ секции N»
   client:     'клиент',   // роль в цитате клиента: «> @Имя»
   unclosed:   'Блок /* открыт в строке {n} и не закрыт — всё ниже скрыто',
+  // Спец-имена переменных денежной петли (Э1.3): локализуемы, EN-алиасы
+  // ('pay', 'deposit', 'valid until', 'email') работают всегда.
+  payVar:     'оплата',          // [оплата] = <url> → кнопка «Оплатить» в экспорте
+  depositVar: 'депозит',         // [депозит] = 30% | 5000 → «Принять и внести депозит»
+  validVar:   'действительна до',// [действительна до] = 01.08 → штамп срока действия
+  emailVar:   'email',           // [email] = адрес автора → mailto «Принять»
 };
 
 const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -77,7 +83,8 @@ export function setLocale(patch){ Object.assign(LOCALE, patch || {}); buildPatte
 let EXPORT = false;
 
 // --- переменные [имя] = формула, ссылка [имя] в формулах ---
-let VARS = {};                                     // текущие переменные (заполняется в render())
+let VARS = {};                                     // числовые переменные (заполняется в render())
+let SVARS = {};                                    // строковые переменные (Э2.2): url оплаты, реквизиты, сроки
 const RE_VARDEF = /^\[([^\]=\n]+)\]\s*=\s*(.+)$/;  // объявление: [имя] = выражение
 function fmtVar(n){                                 // число переменной: запятая, без разрядов
   if(n == null || !isFinite(n)) return '?';
@@ -120,7 +127,11 @@ export function calc(input){
     let j = i;
     while(j < s.length && /[0-9.]/.test(s[j])) j++;
     if(j === i) throw 0;
-    const num = parseFloat(s.slice(i, j));
+    const tok = s.slice(i, j);
+    // «01.08.2026» — дата, а не число: две точки в токене → не выражение.
+    // Иначе parseFloat молча взял бы 1.08, а хвост «.2026» потерялся.
+    if((tok.match(/\./g) || []).length > 1) throw 0;
+    const num = parseFloat(tok);
     if(!isFinite(num)) throw 0;
     i = j; return pct(num);
   }
@@ -226,10 +237,15 @@ export function inline(text){
 
   // Одиночная [ссылка] на переменную вне формулы — подставляем её значение.
   // «= [имя] грн» — как обычная цена с «=»: идёт в Σ; «[имя] грн» — прочая цена.
+  // Строковая переменная подставляется текстом (url дальше авто-линкуется).
   // Неизвестные имена (шаблоны [4000 шт], [date] и т.п.) не трогаем.
   s = s.replace(RE.varRef, (m, eq, nm, grn, unit) => {
     const v = VARS[nm.trim()];
-    if(v == null) return m;
+    if(v == null){
+      const sv = SVARS[nm.trim()];
+      if(sv == null) return m;
+      return `${eq || ''}<span class="var-ref">${esc(sv)}</span>${grn || ''}`;
+    }
     if(grn){
       if(unit) return `<span class="price-other">${fmtNum(v)} ${C}${unit}</span>`;
       if(eq){
@@ -257,6 +273,7 @@ export function render(text, opts){
   const lines = text.split('\n');
   EXPORT = !!(opts && opts.mode === 'export');
   VARS = {};                                   // переменные [имя] — заново на каждый рендер
+  SVARS = {};                                  // строковые — тоже
   let html = '', total = 0, checksTotal = 0, checksDone = 0, positions = 0;
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
   const add = v => { total += v; sectionSum += v; };
@@ -381,6 +398,19 @@ export function render(text, opts){
         }
         continue;
       }
+      // Строковая переменная (Э2.2): RHS — не число и не формула. Хранит что
+      // угодно, что помогает деньгам: url оплаты, IBAN, срок, условия.
+      // «[имя] = ?» не трогаем — это будущие ?-вводные шаблонов (Э2.3).
+      const sval = m[2].trim();
+      if(name && sval !== '' && !/^\?/.test(sval)){
+        SVARS[name] = sval;
+        // EXPORT: объявление — внутренняя кухня (url уйдёт кнопкой, не строкой)
+        if(!EXPORT){
+          emit(`<div class="r-var"><span class="var-name">[${esc(name)}]</span>`
+                + ` <span class="calc-eq">=</span> <span class="var-str">${esc(sval)}</span></div>`);
+        }
+        continue;
+      }
       // не валидное объявление — падаем в обычную обработку ниже
     }
     if(m = t.match(/^(#{1,3})\s+(.*)$/)){
@@ -467,9 +497,30 @@ export function render(text, opts){
   for(const mm of text.matchAll(RE.posVar))             // = [переменная] грн (кроме /шт)
     if(VARS[mm[1].trim()] != null) positions++;
 
+  // Метаданные денежной петли (Э1.3): спец-переменные → кнопки «Принять/Оплатить»
+  // в экспорте. Имена локализуемы (LOCALE.*Var) + постоянные EN-алиасы.
+  const normName = s => String(s).trim().toLowerCase();
+  const lookupVar = (...names) => {
+    const set = names.filter(Boolean).map(normName);
+    for(const k in SVARS) if(set.includes(normName(k))) return SVARS[k];
+    for(const k in VARS)  if(set.includes(normName(k))) return VARS[k];
+    return null;
+  };
+  const payUrl     = lookupVar(LOCALE.payVar, 'pay', 'payment', 'оплата');
+  const depositRaw = lookupVar(LOCALE.depositVar, 'deposit', 'депозит');
+  const validUntil = lookupVar(LOCALE.validVar, 'valid until', 'действительна до');
+  const email      = lookupVar(LOCALE.emailVar, 'email', 'e-mail');
+  const pay = {
+    url:        typeof payUrl === 'string' ? payUrl : null,
+    // депозит: число ≤ 1 — доля от итога («30%» → 0.3), > 1 — фикс-сумма
+    deposit:    typeof depositRaw === 'number' && depositRaw > 0 ? depositRaw : null,
+    validUntil: typeof validUntil === 'string' ? validUntil : null,
+    email:      typeof email === 'string' ? email : null,
+  };
+
   return {
     html,
-    stats: { total, checksTotal, checksDone, positions, declared, sections },
+    stats: { total, checksTotal, checksDone, positions, declared, sections, pay },
     checkLineMap,
     fmt
   };

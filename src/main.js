@@ -823,8 +823,14 @@ body.export .r-check{cursor:default;pointer-events:none;}
 .exp-print{position:fixed;right:20px;bottom:20px;padding:11px 18px;border:0;border-radius:10px;
   background:#2f6df0;color:#fff;font-size:14px;font-weight:700;cursor:pointer;
   font-family:ui-sans-serif,system-ui,sans-serif;box-shadow:0 6px 20px rgba(47,109,240,.35);}
+.exp-actions{max-width:820px;margin:18px auto 0;padding:0 10px;display:flex;gap:10px;
+  flex-wrap:wrap;font-family:ui-sans-serif,system-ui,sans-serif;}
+.exp-actions a{flex:1;min-width:220px;text-align:center;padding:14px 18px;border-radius:12px;
+  font-size:15px;font-weight:800;text-decoration:none;color:#fff;}
+.exp-accept{background:#28a76a;box-shadow:0 6px 18px rgba(40,167,106,.30);}
+.exp-pay{background:#2f6df0;box-shadow:0 6px 18px rgba(47,109,240,.30);}
 @media print{
-  .exp-print{display:none;}
+  .exp-print,.exp-actions{display:none;}
   body.export{background:#fff;}
   body.export .rendered{box-shadow:none;border-radius:0;max-width:none;margin:0;padding:0;}
   .exp-foot{margin:10px 0 0;}
@@ -833,10 +839,35 @@ body.export .r-check{cursor:default;pointer-events:none;}
 async function exportNote(){
   const n = current(); if(!n) return;
   const text = src.value;
-  const { html } = render(text, { mode: 'export' });   // санитайз по построению
+  const { html, stats } = render(text, { mode: 'export' });   // санитайз по построению
   paint();  // render() с export-режимом сбросил внутренний флаг общей паинт-цепочки
   const title = titleFrom(text);
-  const stamp = `${dateStr(true)} · #${shortHash(text)}`;
+  const hash = shortHash(text);
+  const C = LOCALE.currency;
+  const nf2 = v => v.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+
+  // Денежная петля (Э1.3): [оплата]/[депозит]/[действительна до]/[email] → кнопки
+  const pay = stats.pay || {};
+  const base = stats.declared != null ? stats.declared : stats.total;
+  // депозит ≤ 1 — доля от итога («30%» → 0.3), > 1 — фикс-сумма
+  const depositAmt = pay.deposit ? (pay.deposit <= 1 ? Math.round(base * pay.deposit) : pay.deposit) : null;
+  const depositTxt = depositAmt ? `${nf2(depositAmt)} ${C}` : null;
+  const stamp = `${dateStr(true)} · #${hash}`
+    + (pay.validUntil ? ` · ${t('validLabel')} ${escapeHtml(pay.validUntil)}` : '');
+
+  // «Принять» v1 (офлайн-lite): предзаполненный mailto, привязанный к #hash.
+  // Без [email] откроется композер без адресата — клиент подставит сам.
+  const subj = encodeURIComponent(t('acceptSubj', { t: title, h: hash }));
+  const body = encodeURIComponent(
+    t('acceptBody', { t: title, d: dateStr(true), h: hash })
+    + (depositTxt ? `\n${t('acceptDeposit', { x: depositTxt })}` : ''));
+  const mailto = `mailto:${pay.email || ''}?subject=${subj}&body=${body}`;
+  const acceptLabel = depositTxt ? t('acceptBtnDep', { x: depositTxt }) : t('acceptBtn');
+  const actions = `<div class="exp-actions">
+  <a class="exp-accept" href="${mailto}">${acceptLabel}</a>
+  ${pay.url ? `<a class="exp-pay" href="${escapeHtml(pay.url)}" target="_blank" rel="noopener">${t('payBtn')}${depositTxt ? ` · ${depositTxt}` : ''}</a>` : ''}
+</div>`;
+
   let css = '';
   try{ css = await (await fetch('styles.css')).text(); }catch{}
   const page = `<!DOCTYPE html>
@@ -849,6 +880,7 @@ async function exportNote(){
 </head>
 <body class="export">
 <article class="rendered doc-mode">${html}</article>
+${actions}
 <footer class="exp-foot">
   <span>${escapeHtml(title)} · ${stamp}</span>
   <span>${t('exportedWith')} <b>Σ Notatnyk</b></span>
