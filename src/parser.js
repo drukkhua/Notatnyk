@@ -65,13 +65,14 @@ function buildPatterns(){
   // (сумма идёт в Σ). Калькулятор формул (RE.calc) — только «=», не трогаем.
   // Порядок групп: сначала оператор [=:], потом «дробная точка». Иначе точка из
   // «т.д.: 3500» захватилась бы как дробная часть и цену бы отбросило (баг: «:»
-  // без пробела перед ним не срабатывал). Дробную «2.55» ловим, только когда «.»
-  // стоит ВПЛОТНУЮ к числу, без оператора между ними.
-  RE.price     = new RegExp(`(\\\\)?([=:]\\s*)?([.,]?)(\\d[\\d\\s]*)\\s*${cur}${uSfx}?${NL}`, 'gi');
+  // без пробела перед ним не срабатывал). Само число может иметь дробную часть
+  // («14322.56» / «14322,56») — она входит в сумму. Ведущая «дробная точка» (гр.3)
+  // теперь срабатывает лишь для «сироты» «.56 грн» (без целой части) — её отбрасываем.
+  RE.price     = new RegExp(`(\\\\)?([=:]\\s*)?([.,]?)(\\d[\\d\\s]*(?:[.,]\\d+)?)\\s*${cur}${uSfx}?${NL}`, 'gi');
   RE.calc      = new RegExp(`((?:\\[[^\\]]+\\]|[0-9])(?:\\[[^\\]]+\\]|[0-9.,()+\\-*/%^\\s])*?)\\s*=(\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.totalLine = new RegExp(`^(${tot})${NL}\\s*(:?)\\s*(.*)$`, 'i');
-  RE.declared  = new RegExp(`${tot}${NL}\\s*:?\\s*(\\d[\\d\\s]*)`, 'gi');
-  RE.posPrice  = new RegExp(`(?<!\\\\)[=:]\\s*[\\d][\\d\\s]*\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
+  RE.declared  = new RegExp(`${tot}${NL}\\s*:?\\s*(\\d[\\d\\s]*(?:[.,]\\d+)?)`, 'gi');
+  RE.posPrice  = new RegExp(`(?<!\\\\)[=:]\\s*[\\d][\\d\\s]*(?:[.,]\\d+)?\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
   RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.posVar    = new RegExp(`[=:]\\s*\\[([^\\]]+)\\]\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
@@ -198,22 +199,24 @@ export function inline(text){
     // "." или "," ВПЛОТНУЮ к числу (без оператора между) — это дробная часть
     // ("2.55 грн" — множитель), а не отдельная цена. Не трогаем.
     if(dot === '.' || dot === ',') return m;
-    const v = parseInt(n.replace(/\s/g,''),10)||0;
+    // Число может быть дробным («14322.56» / «14322,56») — пробелы это разряды,
+    // запятая/точка внутри — десятичный разделитель.
+    const v = parseFloat(n.replace(/\s/g,'').replace(',','.')) || 0;
     // Экранирование «\=» / «\:» — правило Σ НЕ срабатывает: оператор показываем
     // как обычный текст, цена идёт как прочая (вне Σ), сам слэш в рендер не идёт.
     if(esc && eq){
-      return `${eq}<span class="price-other">${fmt(v)} ${C}${unit || ''}</span>`;
+      return `${eq}<span class="price-other">${fmtNum(v)} ${C}${unit || ''}</span>`;
     }
     // "грн/шт", "грн./шт." — цена за штуку: показываем, но НЕ суммируем в Σ.
-    if(unit) return `<span class="price-other">${fmt(v)} ${C}${unit}</span>`;
+    if(unit) return `<span class="price-other">${fmtNum(v)} ${C}${unit}</span>`;
     // eq (группа 2) непусто, только если перед числом реально был "=" или ":".
     // Показываем ровно тот символ, что ввёл автор (":" остаётся ":", "=" — "=").
     if(eq){
-      sum += v;
+      sum += Math.round((v + Number.EPSILON) * 100) / 100;
       const op = eq.trim() || '=';
-      return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmt(v)} ${C}</span>`;
+      return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
     }
-    return `<span class="price-other">${fmt(v)} ${C}</span>`;
+    return `<span class="price-other">${fmtNum(v)} ${C}</span>`;
   });
 
   // Калькулятор: «<выражение>=» → «выражение = результат».
@@ -540,7 +543,7 @@ export function render(text, opts){
   let declared = null, declaredSum = 0, hasDeclared = false;
   RE.declared.lastIndex = 0;
   for(const mm of text.matchAll(RE.declared)){
-    declaredSum += parseInt(mm[1].replace(/\s/g,''),10)||0;
+    declaredSum += parseFloat(mm[1].replace(/\s/g,'').replace(',','.'))||0;
     hasDeclared = true;
   }
   if(hasDeclared) declared = declaredSum;
