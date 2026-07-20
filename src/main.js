@@ -1223,7 +1223,6 @@ document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
 // подсвеченный ИСХОДНИК (renderSourceLines), не вычисленный рендер, поэтому
 // спецсимволы не ломают виджеты (их нет). Инвариант: textContent строки == строка.
 const sym = $('#sym');
-const editorBody = document.querySelector('.editor-body');
 let symComposing = false;     // IME-композиция (Android/iOS/CJK) — не перерисовываем
 let symTimer = null;
 
@@ -1303,23 +1302,23 @@ sym.addEventListener('mousedown', e=>{
   }
 });
 
-// ── Переключатель вида: Источник ↔ Симбиоз ↔ Только рендер ──────────────────
-let viewMode = 'split';                       // split | sym | view
+// ── Переключатель вида: Источник ↔ Симбиоз ↔ Рендер ─────────────────────────
+// Всё показ/скрытие панелей — через data-view на #split (CSS). Десктоп: источник
+// и симбиоз показывают выбранный редактор СЛЕВА + рендер справа; «Рендер» — только
+// рендер. Телефон (@media ≤640): показывается ТОЛЬКО одна панель, без разделения
+// экрана (симбиоз по умолчанию), см. styles.css.
+let viewMode = 'source';                      // source | sym | view
 function setView(mode){
   // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
   if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
   viewMode = mode;
-  split.classList.toggle('viewonly', mode === 'view');
-  const symOn = mode === 'sym';
-  sym.hidden = !symOn;
-  editorBody.style.display = symOn ? 'none' : '';
-  toolbar.style.display = symOn ? 'none' : '';   // β: тулбар — только в «Источнике»
-  for(const id of ['segSplit','segSym','segView'])
-    $('#'+id).classList.toggle('active', id === 'seg' + mode[0].toUpperCase() + mode.slice(1));
-  if(symOn){ symPaint(src.value); sym.focus(); }
+  split.dataset.view = mode;                   // CSS решает, что видно
+  const seg = { source:'segSplit', sym:'segSym', view:'segView' };
+  for(const m in seg) $('#'+seg[m]).classList.toggle('active', m === mode);
+  if(mode === 'sym'){ symPaint(src.value); sym.focus(); }
   paint();
 }
-$('#segSplit').onclick = ()=> setView('split');
+$('#segSplit').onclick = ()=> setView('source');
 $('#segSym').onclick   = ()=> setView('sym');
 $('#segView').onclick  = ()=> setView('view');
 $('#themeBtn').onclick = ()=>{
@@ -1388,6 +1387,8 @@ async function seed(){
     try{ if(localStorage.getItem(DOCMODE_KEY) === '1') applyDocMode(true); }catch{}
     await loadAll();
     select(currentId);
+    // Телефон: по умолчанию симбиоз (одна поверхность, без разделения экрана).
+    setView(window.matchMedia('(max-width:640px)').matches ? 'sym' : 'source');
   }catch(e){
     out.innerHTML = `<div class="r-callout">⚠️ ${t('initError')}: ${e}</div>`;
   }

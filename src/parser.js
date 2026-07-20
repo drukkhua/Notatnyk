@@ -351,11 +351,14 @@ export function render(text, opts){
       if(!EXPORT){
         const body = lines.slice(blockStart + 1, lineIdx).map(x => x.trim()).filter(Boolean);
         curLine = blockStart;
+        // тело раскрытого чипа считаем через inline() — формулы/переменные
+        // вычисляются (VARS уже заполнены выше по тексту). Сумму inline() НЕ
+        // добавляем в Σ повторно — она уже учтена в цикле выше (hidden-строки).
         emit('<details class="r-hidden"><summary class="r-hidden-head">'
            + '<span class="r-hidden-eye" aria-hidden="true">🙈</span>'
            + `<span class="r-hidden-label">${esc(LOCALE.internal || 'внутренние расчёты')}</span>`
            + `<span class="r-hidden-n">(${body.length})</span></summary>`
-           + `<div class="r-hidden-body">${body.map(l => esc(l)).join('<br>')}</div></details>`,
+           + `<div class="r-hidden-body">${body.map(l => inline(l).html).join('<br>')}</div></details>`,
           'hidden', { count: body.length });
       }
       continue;

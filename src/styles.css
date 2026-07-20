@@ -97,11 +97,19 @@ body{
 .split{flex:1;display:flex;min-height:0;}
 .pane{flex:1;min-width:0;display:flex;}
 .editorpane{flex-direction:column;}
-.split.viewonly .editorpane{display:none;}
 .divider{flex:none;width:7px;cursor:col-resize;background:var(--line-2);
   transition:background .15s;}
 .divider:hover,body.col-resizing .divider{background:var(--check);}
-.split.viewonly .divider{display:none;}
+body.col-resizing{cursor:col-resize;user-select:none;}
+/* ── Режимы редактора (data-view на #split): source | sym | view ────────────
+   Десктоп: source/sym — выбранный редактор СЛЕВА + рендер справа; view — только
+   рендер. Показ панелей — здесь, JS лишь ставит data-view (setView). */
+#sym{display:none;}                                   /* по умолчанию скрыт */
+.split[data-view="sym"] .editor-body{display:none;}
+.split[data-view="sym"] .toolbar{display:none;}       /* β: тулбар только в источнике */
+.split[data-view="sym"] #sym{display:block;}
+.split[data-view="view"] .editorpane{display:none;}
+.split[data-view="view"] .divider{display:none;}
 body.col-resizing{cursor:col-resize;user-select:none;}
 .toolbar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);
   background:var(--paper-2);}
@@ -210,7 +218,6 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   color:var(--ink);font-size:14px;line-height:1.6;outline:none;
   font-family:ui-sans-serif,"Segoe UI",system-ui,-apple-system,sans-serif;
   white-space:pre-wrap;word-break:break-word;}
-.sym[hidden]{display:none;}
 .sym:focus{outline:none;}
 .sym .ed-line{margin:1px 0;min-height:1.3em;}
 .sym .ed-syn{color:var(--formula);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.85em;}
@@ -378,8 +385,15 @@ body.col-resizing{cursor:col-resize;user-select:none;}
     transition:transform .2s;box-shadow:2px 0 12px rgba(0,0,0,.15);}
   .sidebar.open{transform:translateX(0);}
   .split{flex-direction:column;}
-  .editorpane{border-bottom:1px solid var(--line-2);}
   .divider{display:none;}
+  /* Телефон: ОДНА поверхность — показываем только выбранную панель, без
+     разделения экрана (симбиоз по умолчанию; переключается на 100% рендер /
+     100% источник). Требование пользователя. */
+  .split[data-view="source"] .renderpane,
+  .split[data-view="sym"] .renderpane{display:none;}
+  .split[data-view="view"] .editorpane{display:none;}
+  .editorpane{border-bottom:0;}
+  .sym{padding:16px 16px;font-size:15px;}   /* крупнее для пальца */
   .doc-title{max-width:18ch;}
   .gutter{display:none;}              /* на телефоне ширина дороже номеров */
   #src{padding-left:18px;}
