@@ -467,6 +467,27 @@ function syncFromOut(){
   src.scrollTop = Math.max(0, yAtLine(ln));
 }
 
+// ── Синхроскролл симбиоз-холст (#sym) ↔ рендер (#out) по data-line ──────────
+// Обе панели несут data-line на строках/блоках. Ведём по живым координатам DOM
+// (без предвычисленных якорей): у ведущей панели находим строку у верхнего края,
+// у ведомой прокручиваем эту же строку к верхнему краю.
+function topLineOf(pane){
+  const pTop = pane.getBoundingClientRect().top;
+  let best = null;
+  pane.querySelectorAll('[data-line]').forEach(el => {
+    const top = el.getBoundingClientRect().top - pTop;
+    if(top <= 1 && (!best || top > best.top)) best = { line:+el.dataset.line, top };
+  });
+  if(best) return best.line;
+  const first = pane.querySelector('[data-line]');
+  return first ? +first.dataset.line : 0;
+}
+function scrollPaneToLine(pane, line){
+  const el = pane.querySelector(`[data-line="${line}"]`);
+  if(!el) return;
+  pane.scrollTop += el.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+}
+
 src.addEventListener('mouseenter', () => activePane = 'src');
 out.addEventListener('mouseenter', () => activePane = 'out');
 src.addEventListener('touchstart', () => activePane = 'src', { passive:true });
@@ -476,7 +497,11 @@ src.addEventListener('scroll', () => {
   gutterInner.style.transform = `translateY(${-src.scrollTop}px)`;
   if(activePane === 'src') syncFromSrc();
 });
-out.addEventListener('scroll', () => { if(activePane === 'out') syncFromOut(); });
+out.addEventListener('scroll', () => {
+  if(activePane !== 'out') return;
+  if(viewMode === 'sym') scrollPaneToLine(sym, topLineOf(out));  // рендер → симбиоз
+  else syncFromOut();                                            // рендер → источник
+});
 new ResizeObserver(() => { updateGutter(); collectAnchors(); }).observe(src);
 
 function persist(){
@@ -1278,6 +1303,11 @@ function symSync(){
   if(!symComposing){ symPaint(text); symRestore(caret); }
 }
 
+// синхроскролл: симбиоз ведёт → рендер следует (гейт activePane, без обратной петли)
+sym.addEventListener('mouseenter', ()=> activePane = 'sym');
+sym.addEventListener('touchstart', ()=> activePane = 'sym', { passive:true });
+sym.addEventListener('focus', ()=> activePane = 'sym');
+sym.addEventListener('scroll', ()=>{ if(activePane === 'sym') scrollPaneToLine(out, topLineOf(sym)); });
 sym.addEventListener('input', ()=>{ clearTimeout(symTimer); symTimer = setTimeout(symSync, 250); });
 sym.addEventListener('blur', ()=>{ clearTimeout(symTimer); symSync(); });
 sym.addEventListener('compositionstart', ()=>{ symComposing = true; });
