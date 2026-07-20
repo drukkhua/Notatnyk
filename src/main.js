@@ -402,7 +402,7 @@ function ensureMirror(){
 function updateGutter(){
   const cs = getComputedStyle(src);
   const w = src.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  if(w <= 0) return;                     // редактор скрыт (viewonly / телефон)
+  if(w <= 0) return;                     // редактор скрыт (симбиоз/рендер/телефон)
   ensureMirror();
   mirror.style.width = w + 'px';
   const lines = src.value.split('\n');

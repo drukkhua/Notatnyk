@@ -71,7 +71,7 @@ body{
 .theme-btn:hover{background:var(--sum-bg);}
 
 /* workspace */
-.workspace{flex:1;display:flex;flex-direction:column;min-width:0;}
+.workspace{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;}
 .bar{display:flex;align-items:center;justify-content:space-between;
   padding:9px 14px;background:var(--paper);border-bottom:1px solid var(--line);}
 .bar-left{display:flex;align-items:center;gap:10px;min-width:0;}
@@ -95,8 +95,11 @@ body{
 
 /* split */
 .split{flex:1;display:flex;min-height:0;}
-.pane{flex:1;min-width:0;display:flex;}
-.editorpane{flex-direction:column;}
+/* min-height:0 обязателен: иначе flex-панель разрастается по контенту и
+   внутренняя прокрутка (overflow:auto у .rendered/.sym) не включается,
+   а футер выдавливается за экран (особенно на телефоне, column). */
+.pane{flex:1;min-width:0;min-height:0;display:flex;}
+.editorpane{flex-direction:column;min-height:0;}
 .divider{flex:none;width:7px;cursor:col-resize;background:var(--line-2);
   transition:background .15s;}
 .divider:hover,body.col-resizing .divider{background:var(--check);}
@@ -312,8 +315,10 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   border-top:0;border-radius:0 0 8px 8px;white-space:pre-wrap;word-break:break-word;}
 
 /* footer */
-.footersum{display:flex;align-items:center;justify-content:space-between;
-  padding:11px 16px;border-top:1px solid var(--line);background:var(--paper-2);font-size:14px;}
+/* Футер с итогами: всегда виден, приподнят тенью над контентом (z-index). */
+.footersum{display:flex;align-items:center;justify-content:space-between;flex:none;
+  padding:11px 16px;border-top:1px solid var(--line);background:var(--paper-2);font-size:14px;
+  position:relative;z-index:15;box-shadow:0 -3px 12px rgba(15,19,27,.10);}
 .fold-all{border:1px solid var(--line-2);background:var(--paper);color:var(--ink-soft);
   border-radius:999px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;
   white-space:nowrap;margin-right:12px;}
@@ -393,10 +398,15 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   .split[data-view="sym"] .renderpane{display:none;}
   .split[data-view="view"] .editorpane{display:none;}
   .editorpane{border-bottom:0;}
-  .sym{padding:16px 16px;font-size:15px;}   /* крупнее для пальца */
+  /* Футер итогов — плавающий поверх контента (перекрывает панель), всегда виден.
+     Контент прокручивается ПОД ним, поэтому у панелей нижний отступ. */
+  .footersum{position:absolute;left:0;right:0;bottom:0;z-index:20;
+    padding:9px 14px;font-size:12.5px;}
+  .sym{padding:16px 16px 64px;font-size:15px;}   /* крупнее для пальца + место под футер */
+  .rendered{padding-bottom:64px;}
   .doc-title{max-width:18ch;}
   .gutter{display:none;}              /* на телефоне ширина дороже номеров */
-  #src{padding-left:18px;}
+  #src{padding-left:18px;padding-bottom:64px;}
   /* тач-цели ≥ 44px: чек-боксы, шапки секций, чип скрытого (ux-proposal §2) */
   .r-check{min-height:44px;}
   .r-check .box{width:24px;height:24px;}
