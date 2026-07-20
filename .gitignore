@@ -7,6 +7,10 @@ src-tauri/target/
 # Tauri generated schemas
 src-tauri/gen/schemas/
 
+# Tauri mobile projects (regenerated in CI via `tauri android/ios init`)
+src-tauri/gen/android/
+src-tauri/gen/apple/
+
 # Build output
 dist/
 
@@ -19,3 +23,10 @@ dist/
 
 # Local Claude settings
 .claude/settings.local.json
+
+# Private / real data — never publish (public repo).
+# notes-testing/ ships the 10 demo estimates (.md) as bundled demo content;
+# exported HTML and any real note (e.g. tax requisites) stay local only.
+notes-testing/*.html
+notes-testing/910f0174-*.md
+config.json

@@ -27,6 +27,11 @@
 [equip] = ([buy_espresso] + [buy_grinder] + [buy_fridge] + [buy_bar] + [buy_small]) + [markup]%
 [launch] = 120506
 [invest] = [equip] + [launch]
+// денежная петля (Э1.3) — кнопки «Принять/Оплатить» в экспорте
+[email] = hello@example.com
+[оплата] = https://send.monobank.ua/jar/test
+[депозит] = 30%
+[действительна до] = 01.08.2026
 
 ===
 1. Оборудование
