@@ -31,6 +31,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../notes-testing/book-club.md": "demo/",
+      "../notes-testing/elektromontazh.md": "demo/",
+      "../notes-testing/gazon-ozelenenie.md": "demo/",
+      "../notes-testing/gruzoperevozki.md": "demo/",
+      "../notes-testing/klining.md": "demo/",
+      "../notes-testing/kofejnya-launch.md": "demo/",
+      "../notes-testing/konditsionery.md": "demo/",
+      "../notes-testing/kuhnya-na-zakaz.md": "demo/",
+      "../notes-testing/natyazhnye-potolki.md": "demo/",
+      "../notes-testing/remont-kvartiry.md": "demo/"
+    }
   }
 }
