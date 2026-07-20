@@ -1,0 +1,101 @@
+# Сборка под iOS. ВАЖНО (ограничение Apple, не наше):
+# устанавливаемый на живой iPhone `.ipa` ТРЕБУЕТ платного Apple Developer-аккаунта
+# ($99/год) — сертификата подписи и provisioning-профиля. Без них Apple не даёт
+# собрать приложение для устройства.
+#
+#   • Секреты подписи НЕ заданы (по умолчанию, открытый репозиторий):
+#       собираем под Симулятор (CODE_SIGNING_ALLOWED=NO) — доказываем, что проект
+#       собирается; артефакт под iPhone НЕ создаётся. Шаг помечен как «мягкий» и
+#       не роняет пайплайн.
+#   • Секреты заданы (IOS_CERTIFICATE_BASE64, IOS_CERTIFICATE_PASSWORD,
+#     IOS_PROVISIONING_PROFILE_BASE64, APPLE_TEAM_ID):
+#       собираем подписанный `.ipa` и кладём в Artifacts.
+name: build-ios
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    env:
+      # secrets в if: напрямую не читаются — прокидываем через env
+      HAS_SIGNING: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust (+ iOS targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend deps
+        run: npm install
+
+      # gen/apple не хранится в репозитории — генерируем на лету
+      - name: Init iOS project
+        run: npx tauri ios init --ci
+
+      # ── Путь A: без Apple-аккаунта — компиляция под Симулятор (не для устройства) ──
+      - name: Compile for iOS Simulator (unsigned proof-of-build)
+        if: ${{ env.HAS_SIGNING != 'true' }}
+        continue-on-error: true
+        run: |
+          echo "::notice title=iOS::Устанавливаемый .ipa требует Apple Developer-аккаунта. Собираю только под Симулятор — на живой iPhone это не поставится. См. README → «Подпись iOS»."
+          cd src-tauri/gen/apple
+          SCHEME=$(xcodebuild -list -json 2>/dev/null | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);const s=(j.project&&j.project.schemes)||(j.workspace&&j.workspace.schemes)||[];process.stdout.write(s.find(x=>/ios/i.test(x))||s[0]||"")}catch(e){}})')
+          echo "Scheme: $SCHEME"
+          xcodebuild -scheme "$SCHEME" -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            build CODE_SIGNING_ALLOWED=NO
+
+      # ── Путь B: подписанная сборка под устройство (когда заданы секреты Apple) ──
+      - name: Build signed .ipa
+        if: ${{ env.HAS_SIGNING == 'true' }}
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          # импорт сертификата во временный keychain
+          KEYCHAIN=$RUNNER_TEMP/build.keychain
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN"
+          # установка provisioning-профиля
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/ci.mobileprovision"
+          npx tauri ios build --export-method app-store-connect
+
+      - name: Upload .ipa
+        if: ${{ env.HAS_SIGNING == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: notatnyk-ios-ipa
+          if-no-files-found: warn
+          path: src-tauri/gen/apple/build/**/*.ipa
