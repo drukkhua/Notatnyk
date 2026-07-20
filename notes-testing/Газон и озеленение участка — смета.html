@@ -13,6 +13,11 @@
   --danger-bg:#fef2f2; --danger-line:#fbd5d5; --danger-tx:#b42318;
   --check:#2f6df0; --done:#8b93a1; --green:#28a76a; --focus:#2f6df0;
   --src-bg:#e9ecf2; --src-num:#9aa3b3;   /* фон источника темнее бумаги; номера строк */
+  /* Шрифт вида «Документ» и экспорта. Переключается из меню «Aa» (main.js,
+     DOC_FONTS): системные кросс-ОС стеки с кириллицей и РОВНЫМИ (lining)
+     цифрами — смета состоит из цифр, минускульные цифры (Georgia) запрещены. */
+  --doc-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif;
+  --doc-size:15px;
 }
 [data-theme="dark"]{
   --ink:#e8ebf2; --ink-soft:#9aa3b5; --formula:#5f6878; --paper:#161b26; --paper-2:#1d2330;
@@ -206,26 +211,71 @@ body.col-resizing{cursor:col-resize;user-select:none;}
 
 /* ── Пресет «Документ» (Э1.1): типографика сметы для клиента ────────────────
    Чисто визуальный класс на #out; движок не знает о пресете. Тот же класс
-   используется в экспортированном HTML («Отдать клиенту»). */
-.rendered.doc-mode{font-family:Georgia,'Iowan Old Style','Times New Roman',serif;
-  font-size:15px;line-height:1.68;padding:34px 46px;}
-.doc-mode .r-h1{font-size:26px;font-weight:700;color:var(--ink);letter-spacing:0;
+   используется в экспортированном HTML («Отдать клиенту»). Шрифт и размер —
+   через --doc-font/--doc-size (меню «Aa»). */
+/* Внутри пресета ВСЕ размеры — в em от --doc-size: только так S/M/L из меню
+   «Aa» масштабирует документ целиком (px-размеры глушили бы наследование). */
+.rendered.doc-mode{font-family:var(--doc-font);
+  font-size:var(--doc-size);line-height:1.68;padding:34px 46px;}
+.doc-mode .r-h1{font-size:1.73em;font-weight:700;color:var(--ink);letter-spacing:0;
   border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:16px;}
-.doc-mode .r-h2{font-size:19px;margin:22px 0 9px;}
-.doc-mode .r-h3{font-size:15px;color:var(--ink);}
-.doc-mode .r-num{font-size:15.5px;margin:6px 0;}
-.doc-mode .r-li,.doc-mode .r-p{font-size:14.5px;color:var(--ink);line-height:1.65;}
-.doc-mode .r-total{font-size:18px;margin:14px 0;}
+.doc-mode .r-h2{font-size:1.27em;margin:22px 0 9px;}
+.doc-mode .r-h3{font-size:1em;color:var(--ink);}
+.doc-mode .r-num{font-size:1.03em;margin:6px 0;}
+.doc-mode .r-li,.doc-mode .r-p{font-size:0.97em;color:var(--ink);line-height:1.65;}
+.doc-mode .r-total{font-size:1.2em;margin:14px 0;}
 .doc-mode .price-sum,.doc-mode .calc-res{font-size:1em;padding:2px 12px;}
-.doc-mode .r-table{font-size:14px;}
+.doc-mode .r-table{font-size:0.93em;}
 .doc-mode .r-table td{padding:9px 12px;}
 .doc-mode .r-quote{background:transparent;border-left:3px solid var(--line-2);
   border-radius:0;padding:8px 14px;}
+.doc-mode .r-quote-body{font-size:0.97em;}
+.doc-mode .r-callout{font-size:0.97em;}
+.doc-mode .r-var{font-size:0.9em;}
 .doc-mode .r-check{cursor:default;}
+
+/* ── Компактный вид: сворачиваемые секции (порт из BitrixUI) ────────────────── */
+/* .r-sec — обёртка секции; шапка кликабельна (свернуть/развернуть). Свёрнутая
+   показывает свод «1/4 ✓ · Итого: N». Каретка ▸→▾. */
+.r-sec{display:block;}
+.r-sec-head{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
+  padding:3px 6px;margin:8px -6px 4px;border-radius:7px;outline:none;}
+.r-sec.lvl1>.r-sec-head{margin-top:2px;}
+.r-sec-head:hover{background:var(--paper-2);}
+.r-sec-head:focus-visible{box-shadow:0 0 0 2px var(--sum-bg);}
+.rendered>.r-sec:first-child>.r-sec-head{margin-top:0;}
+.r-sec-caret{flex:none;width:7px;height:7px;margin:0 3px 0 1px;
+  border-right:2px solid var(--ink-soft);border-bottom:2px solid var(--ink-soft);
+  transform:rotate(-45deg);transition:transform .15s ease;}
+.r-sec:not(.collapsed)>.r-sec-head .r-sec-caret{transform:rotate(45deg);}
+.r-sec-head .r-sec-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* шапка секции наследует размеры r-h1/2/3, но без их margin (они уже в .r-sec-head) */
+.r-sec-head.r-h1,.r-sec-head.r-h2,.r-sec-head.r-h3{margin-left:-6px;margin-right:-6px;}
+.r-sec-sum{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--sum-tx);
+  background:var(--sum-bg);border:1px solid var(--sum-line);border-radius:999px;
+  padding:1px 9px;white-space:nowrap;}
+.r-sec-body{display:block;}
+
+/* Скрытый блок /* */ → чип «🙈 внутренние расчёты (N)», раскрываемый (только в рабочем виде) */
+.r-hidden{margin:8px 0;}
+.r-hidden-head{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+  list-style:none;font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--paper-2);
+  border:1px dashed var(--line-2);border-radius:999px;padding:3px 11px;}
+.r-hidden-head::-webkit-details-marker{display:none;}
+.r-hidden[open]>.r-hidden-head{border-style:solid;border-radius:8px 8px 0 0;}
+.r-hidden-n{color:var(--formula);font-weight:500;}
+.r-hidden-body{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12px;
+  color:var(--formula);line-height:1.6;padding:8px 12px;border:1px dashed var(--line-2);
+  border-top:0;border-radius:0 0 8px 8px;white-space:pre-wrap;word-break:break-word;}
 
 /* footer */
 .footersum{display:flex;align-items:center;justify-content:space-between;
   padding:11px 16px;border-top:1px solid var(--line);background:var(--paper-2);font-size:14px;}
+.fold-all{border:1px solid var(--line-2);background:var(--paper);color:var(--ink-soft);
+  border-radius:999px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer;
+  white-space:nowrap;margin-right:12px;}
+.fold-all:hover{border-color:var(--sum-line);color:var(--sum-tx);background:var(--sum-bg);}
+.fold-all[hidden]{display:none;}
 #sumLabel b{color:var(--sum-tx);}
 .footersum .ok{color:var(--green);font-weight:700;font-size:12px;}
 .footersum .bad{color:#d3452f;font-weight:700;font-size:12px;}
@@ -270,6 +320,22 @@ body.col-resizing{cursor:col-resize;user-select:none;}
 .loc-presets{display:flex;gap:6px;margin-bottom:6px;}
 .loc-presets .tb-btn{flex:1;text-align:center;padding:6px;}
 
+/* ── Меню «Aa»: шрифт документа ─────────────────────────────────────────────
+   Каждая карточка рисуется СВОИМ шрифтом — предпросмотр вместо описаний. */
+.font-cards{display:flex;flex-direction:column;gap:8px;}
+.font-card{display:flex;flex-direction:column;gap:3px;text-align:left;cursor:pointer;
+  padding:11px 14px;border:1px solid var(--line-2);border-radius:10px;
+  background:var(--paper-2);color:var(--ink);}
+.font-card:hover{border-color:var(--sum-line);}
+.font-card.active{border-color:var(--check);background:var(--sum-bg);}
+.fc-name{font-size:14px;font-weight:700;}
+.fc-note{font-size:11px;color:var(--ink-soft);
+  font-family:ui-sans-serif,system-ui,sans-serif;}  /* пояснение — всегда UI-шрифтом */
+.fc-sample{font-size:15px;margin-top:3px;}
+.font-size-row{display:flex;align-items:center;justify-content:space-between;
+  font-size:13px;color:var(--ink-soft);margin-top:4px;}
+.font-size-row .seg-btn{min-width:40px;}
+
 /* mobile / narrow (Android) */
 @media(max-width:640px){
   .sidebar{position:fixed;z-index:10;height:100%;transform:translateX(-100%);
@@ -281,6 +347,14 @@ body.col-resizing{cursor:col-resize;user-select:none;}
   .doc-title{max-width:18ch;}
   .gutter{display:none;}              /* на телефоне ширина дороже номеров */
   #src{padding-left:18px;}
+  /* тач-цели ≥ 44px: чек-боксы, шапки секций, чип скрытого (ux-proposal §2) */
+  .r-check{min-height:44px;}
+  .r-check .box{width:24px;height:24px;}
+  .r-check .box svg{width:15px;height:15px;}
+  .r-sec-head{min-height:44px;}
+  .r-sec-sum{font-size:12px;}
+  .r-hidden-head{padding:8px 14px;}
+  .fold-all{padding:6px 14px;font-size:12px;}
 }
 
 
@@ -306,16 +380,17 @@ body.export .r-check{cursor:default;pointer-events:none;}
   body.export{background:#fff;}
   body.export .rendered{box-shadow:none;border-radius:0;max-width:none;margin:0;padding:0;}
   .exp-foot{margin:10px 0 0;}
-}</style>
+}
+:root{--doc-font:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",Roboto,"Noto Sans",sans-serif;--doc-size:16.5px;}</style>
 </head>
 <body class="export">
-<article class="rendered doc-mode"><div data-line="0" class="r-h1">Газон и озеленение участка — смета</div><div data-line="1" class="r-p">17.07.2026г. 15:53</div><blockquote data-line="2" class="r-quote"><span class="r-quote-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></svg></span><div class="r-quote-client"><span class="r-quote-ava">Д</span><span class="r-quote-name">Дмитрий</span><span class="r-quote-role">клиент</span></div><div class="r-quote-body">Участок 6 соток, хотим рулонный газон на 320 м², автополив, живую изгородь по периметру и несколько хвойных. Нужен расчёт с посадкой и запуском полива.</div></blockquote><div data-line="5" class="r-h2">Участок</div><table data-line="6" class="r-table"><tr class="r-tr-head"><td>Параметр</td><td>Значение</td></tr><tr><td><strong>площадь газона</strong></td><td>320 м²</td></tr><tr><td><strong>периметр изгороди</strong></td><td>90 м.п.</td></tr><tr><td><strong>хвойных (крупномер)</strong></td><td>8</td></tr><tr><td><strong>зон полива</strong></td><td>5</td></tr><tr><td><strong>уклон</strong></td><td>небольшой, планировка нужна</td></tr></table><hr data-line="13" class="r-hr2"><div data-line="14" class="r-h3">Блок переменных</div><hr data-line="27" class="r-hr2"><div data-line="28" class="r-num">1. Газон и планировка</div><div data-line="29" class="r-h3">Подготовка и укладка</div><hr data-line="30" class="r-hr"><div data-line="31" class="r-li">планировка и культивация = <span class="price-sum">14 400 грн</span></div><div data-line="32" class="r-li">плодородный грунт (завоз + разравнивание) = <span class="price-sum">25 600 грн</span></div><div data-line="33" class="r-li">укладка рулонного газона = <span class="price-sum">38 400 грн</span></div><div data-line="34" class="r-li">рулонный газон (материал) = <span class="price-sum">35 200 грн</span></div><div data-line="36" class="r-li">первый прикатка + запуск <span class="calc-eq">=</span> <span class="price-sum">2 500 грн</span></div><hr data-line="37" class="r-hr"><div data-line="38" class="r-total"><b>Итого:</b> <span class="price-other">116 100 грн</span> <span class="per-unit">(362,81 грн/м²)</span> <span class="r-total-ok">✓</span></div><hr data-line="40" class="r-hr2"><div data-line="41" class="r-num">2. Озеленение и автополив</div><div data-line="42" class="r-h3">Изгородь, деревья, система</div><hr data-line="43" class="r-hr"><div data-line="44" class="r-li">посадка живой изгороди = <span class="price-sum">23 400 грн</span></div><div data-line="45" class="r-li">саженцы туи по периметру = <span class="price-sum">17 100 грн</span></div><div data-line="46" class="r-li">посадка хвойных крупномеров = <span class="price-sum">6 800 грн</span></div><div data-line="47" class="r-li">монтаж автополива = <span class="price-sum">16 000 грн</span></div><hr data-line="48" class="r-hr"><div data-line="49" class="r-total"><b>Итого:</b> <span class="price-other">63 300 грн</span> <span class="per-unit">(197,81 грн/м²)</span> <span class="r-total-ok">✓</span></div><hr data-line="51" class="r-hr2"><div data-line="52" class="r-callout"><span class="r-callout-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span><span>Цена за м² газона = Итого газона ÷ [320 м²] — сразу видно</span></div><div data-line="53" class="r-callout strong"><span class="r-callout-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/></svg></span><span>Рулонный газон укладываем в течение 24 ч после срезки — согласуйте день завоза заранее</span></div><div data-line="55" class="r-h3">Этапы работ</div><div data-line="56" class="r-check done" data-check="0"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span class="txt">замер и план озеленения</span><span class="stamp">(ГОТОВО)</span></div><div data-line="57" class="r-check" data-check="1"><span class="box"></span><span class="txt">планировка и грунт</span></div><div data-line="58" class="r-check" data-check="2"><span class="box"></span><span class="txt">укладка газона</span></div><div data-line="59" class="r-check" data-check="3"><span class="box"></span><span class="txt">автополив и посадки</span></div></article>
+<article class="rendered doc-mode"><div data-line="0" class="r-h1">Газон и озеленение участка — смета</div><div data-line="1" class="r-p">17.07.2026г. 15:53</div><blockquote data-line="2" class="r-quote"><span class="r-quote-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></svg></span><div class="r-quote-client"><span class="r-quote-ava">Д</span><span class="r-quote-name">Дмитрий</span><span class="r-quote-role">клиент</span></div><div class="r-quote-body">Участок 6 соток, хотим рулонный газон на 320 м², автополив, живую изгородь по периметру и несколько хвойных. Нужен расчёт с посадкой и запуском полива.</div></blockquote><div data-line="5" class="r-h2">Участок</div><table data-line="6" class="r-table"><tr class="r-tr-head"><td>Параметр</td><td>Значение</td></tr><tr><td><strong>площадь газона</strong></td><td>320 м²</td></tr><tr><td><strong>периметр изгороди</strong></td><td>90 м.п.</td></tr><tr><td><strong>хвойных (крупномер)</strong></td><td>8</td></tr><tr><td><strong>зон полива</strong></td><td>5</td></tr><tr><td><strong>уклон</strong></td><td>небольшой, планировка нужна</td></tr></table><hr data-line="13" class="r-hr2"><div data-line="14" class="r-h3">Блок переменных</div><hr data-line="27" class="r-hr2"><div data-line="28" class="r-num">1. Газон и планировка</div><div data-line="29" class="r-h3">Подготовка и укладка</div><hr data-line="30" class="r-hr"><div data-line="31" class="r-li">планировка и культивация = <span class="price-sum">14 400 грн</span></div><div data-line="32" class="r-li">плодородный грунт (завоз + разравнивание) = <span class="price-sum">25 600 грн</span></div><div data-line="33" class="r-li">укладка рулонного газона = <span class="price-sum">38 400 грн</span></div><div data-line="34" class="r-li">рулонный газон (материал) = <span class="price-sum">35 200 грн</span></div><div data-line="36" class="r-li">первый прикатка + запуск <span class="calc-eq">=</span> <span class="price-sum">2 500 грн</span></div><hr data-line="37" class="r-hr"><div data-line="38" class="r-total"><b>Итого:</b> <span class="price-other">116 100 грн</span> <span class="per-unit">(362,81 грн/м²)</span> <span class="r-total-ok">✓</span></div><hr data-line="40" class="r-hr2"><div data-line="41" class="r-num">2. Озеленение и автополив</div><div data-line="42" class="r-h3">Изгородь, деревья, система</div><hr data-line="43" class="r-hr"><div data-line="44" class="r-li">посадка живой изгороди = <span class="price-sum">23 400 грн</span></div><div data-line="45" class="r-li">саженцы туи по периметру = <span class="price-sum">17 100 грн</span></div><div data-line="46" class="r-li">посадка хвойных крупномеров = <span class="price-sum">6 800 грн</span></div><div data-line="47" class="r-li">монтаж автополива = <span class="price-sum">16 000 грн</span></div><hr data-line="48" class="r-hr"><div data-line="49" class="r-total"><b>Итого:</b> <span class="price-other">63 300 грн</span> <span class="per-unit">(197,81 грн/м²)</span> <span class="r-total-ok">✓</span></div><hr data-line="51" class="r-hr2"><div data-line="52" class="r-callout"><span class="r-callout-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span><span>Цена за м² газона = Итого газона ÷ [320 м²] — сразу видно</span></div><div data-line="53" class="r-callout strong"><span class="r-callout-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/></svg></span><span>Рулонный газон укладываем в течение 24 ч после срезки — согласуйте день завоза заранее</span></div><div data-line="55" class="r-h3">Этапы работ</div><div data-line="56" class="r-check done" data-check="0"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span class="txt">замер и план озеленения</span><span class="stamp">(ГОТОВО)</span></div><div data-line="57" class="r-check done" data-check="1"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span class="txt">планировка и грунт</span><span class="stamp">(ГОТОВО)</span></div><div data-line="58" class="r-check" data-check="2"><span class="box"></span><span class="txt">укладка газона</span></div><div data-line="59" class="r-check" data-check="3"><span class="box"></span><span class="txt">автополив и посадки</span></div></article>
 <div class="exp-actions">
-  <a class="exp-accept" href="mailto:?subject=%D0%9F%D1%80%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D1%8E%20%D1%81%D0%BC%D0%B5%D1%82%D1%83%20%C2%AB%D0%93%D0%B0%D0%B7%D0%BE%D0%BD%20%D0%B8%20%D0%BE%D0%B7%D0%B5%D0%BB%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20%D1%83%D1%87%D0%B0%D1%81%D1%82%D0%BA%D0%B0%20%E2%80%94%20%D1%81%D0%BC%D0%B5%D1%82%D0%B0%C2%BB%20%23b581f1f2&body=%D0%9F%D1%80%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D1%8E%20%D1%81%D0%BC%D0%B5%D1%82%D1%83%20%C2%AB%D0%93%D0%B0%D0%B7%D0%BE%D0%BD%20%D0%B8%20%D0%BE%D0%B7%D0%B5%D0%BB%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20%D1%83%D1%87%D0%B0%D1%81%D1%82%D0%BA%D0%B0%20%E2%80%94%20%D1%81%D0%BC%D0%B5%D1%82%D0%B0%C2%BB%20%D0%BE%D1%82%2019.07.2026%D0%B3.%2009%3A21%2C%20%23b581f1f2.">✓ Принять смету</a>
+  <a class="exp-accept" href="mailto:?subject=%D0%9F%D1%80%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D1%8E%20%D1%81%D0%BC%D0%B5%D1%82%D1%83%20%C2%AB%D0%93%D0%B0%D0%B7%D0%BE%D0%BD%20%D0%B8%20%D0%BE%D0%B7%D0%B5%D0%BB%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20%D1%83%D1%87%D0%B0%D1%81%D1%82%D0%BA%D0%B0%20%E2%80%94%20%D1%81%D0%BC%D0%B5%D1%82%D0%B0%C2%BB%20%236158b24a&body=%D0%9F%D1%80%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D1%8E%20%D1%81%D0%BC%D0%B5%D1%82%D1%83%20%C2%AB%D0%93%D0%B0%D0%B7%D0%BE%D0%BD%20%D0%B8%20%D0%BE%D0%B7%D0%B5%D0%BB%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20%D1%83%D1%87%D0%B0%D1%81%D1%82%D0%BA%D0%B0%20%E2%80%94%20%D1%81%D0%BC%D0%B5%D1%82%D0%B0%C2%BB%20%D0%BE%D1%82%2019.07.2026%D0%B3.%2018%3A24%2C%20%236158b24a.">✓ Принять смету</a>
   
 </div>
 <footer class="exp-foot">
-  <span>Газон и озеленение участка — смета · 19.07.2026г. 09:21 · #b581f1f2</span>
+  <span>Газон и озеленение участка — смета · 19.07.2026г. 18:24 · #6158b24a</span>
   <span>Составлено в <b>Σ Notatnyk</b></span>
 </footer>
 <button class="exp-print" onclick="window.print()">Печать / PDF</button>
