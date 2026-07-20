@@ -638,3 +638,103 @@ export function longSectionKeys(nodes, out = []){
     }
   return out;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// СИМБИОЗ-РЕДАКТОР: построчный рендер ИСХОДНИКА с подсветкой (порт из BitrixUI).
+// Одна строка источника = один <div data-line>. Разметка видна серым (.ed-syn),
+// текст сразу оформляется (жирный/курсив/цены), НО остаётся сырым.
+//
+// ИНВАРИАНТ И1: textContent строки == исходная строка. Поэтому:
+//  • SVG-иконки/виджеты — contenteditable=false и без текста (не влияют на textContent);
+//  • числа НЕ переформатируем, вычисления НЕ подставляем (это только в render());
+//  • маркеры (#, **, //, [x]) остаются реальными символами, лишь красятся серым.
+// Благодаря И1 правки читаются назад простым обходом textContent, а курсор
+// восстанавливается по {строка, смещение}. Вычисленные результаты и Σ — в
+// режиме просмотра render() и в футере; здесь их нет (симбиоз = разметка+формат).
+// ЗАМЕЧАНИЕ: строки трактуются trim-нутыми (ведущие/хвостовые пробелы строки
+// нормализуются при правке в симбиозе) — как и в render(); точный пробел — в «Исходнике».
+const edSyn = s => `<span class="ed-syn">${esc(s)}</span>`;
+
+// Инлайн для редактора: маркеры сохраняем (серым), внутренний текст оформляем,
+// всё дословно (textContent == исходная строка).
+function inlineSource(text){
+  let s = esc(text);
+  // цена: весь фрагмент дословно в чип; counted (синий), если «=»/«:» и без «\».
+  s = s.replace(RE.price, (m, edEsc, eq, dot) => {
+    if(dot === '.' || dot === ',') return m;          // дробная часть — не цена
+    const counted = !!eq && !edEsc;
+    return `<span class="ed-money${counted ? ' counted' : ''}">${m}</span>`;
+  });
+  s = s.replace(/\*\*([^*]+)\*\*/g, `${edSyn('**')}<strong>$1</strong>${edSyn('**')}`);
+  s = s.replace(/==([^=]+)==/g,     `${edSyn('==')}<mark>$1</mark>${edSyn('==')}`);
+  s = s.replace(/~~([^~]+)~~/g,     `${edSyn('~~')}<del>$1</del>${edSyn('~~')}`);
+  s = s.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, `$1${edSyn('*')}<em>$2</em>${edSyn('*')}`);
+  s = s.replace(/(https?:\/\/[^\s<]+)/g, '<span class="ed-link">$1</span>');
+  return s;
+}
+
+// Один <div> на строку источника (включая пустые) — для contenteditable-редактора.
+export function renderSourceLines(text){
+  const lines = text.split('\n');
+  let out = '';
+  let hiddenBlock = false;
+  for(let i = 0; i < lines.length; i++){
+    const t = lines[i].trim();
+    const dl = `data-line="${i}"`;
+    if(t === ''){ out += `<div ${dl}><br></div>`; continue; }
+
+    // скрытый блок /* … */ — показываем сырьём, приглушённо
+    if(!hiddenBlock && /^\/\*/.test(t)){ hiddenBlock = true; out += `<div ${dl} class="ed-line ed-hidden">${edSyn(t)}</div>`; continue; }
+    if(hiddenBlock){
+      const close = /^\*\/$/.test(t);
+      out += `<div ${dl} class="ed-line ed-hidden">${edSyn(t)}</div>`;
+      if(close) hiddenBlock = false;
+      continue;
+    }
+    let m;
+    if(m = t.match(/^(\/\/\s?)(.*)$/)){ out += `<div ${dl} class="ed-line ed-hidden">${edSyn(m[1])}${inlineSource(m[2])}</div>`; continue; }
+
+    if(/^={3,}$/.test(t)){ out += `<div ${dl} class="ed-line ed-rule heavy">${edSyn(t)}</div>`; continue; }
+    if(/^-{3,}$/.test(t)){ out += `<div ${dl} class="ed-line ed-rule">${edSyn(t)}</div>`; continue; }
+
+    if(m = t.match(RE_VARDEF)){
+      out += `<div ${dl} class="ed-line r-var">${edSyn('[' + m[1] + ']')} ${edSyn('= ')}<span class="var-formula">${esc(m[2])}</span></div>`;
+      continue;
+    }
+    if(m = t.match(/^(#{1,3})(\s+)(.*)$/)){
+      out += `<div ${dl} class="ed-line r-h${m[1].length}">${edSyn(m[1] + m[2])}${inlineSource(m[3])}</div>`;
+      continue;
+    }
+    if(m = t.match(/^\[([ xX])\](\s*)(.*)$/)){
+      const done = m[1].toLowerCase() === 'x';
+      out += `<div ${dl} class="ed-line r-check${done ? ' done' : ''}">`
+        + `<span class="box" data-toggle="${i}" contenteditable="false">${done ? ICO.check : ''}</span>`
+        + `${edSyn('[' + m[1] + ']' + m[2])}<span class="txt">${inlineSource(m[3])}</span></div>`;
+      continue;
+    }
+    if(m = t.match(/^(!!?)(\s+)(.*)$/)){
+      const strong = m[1] === '!!';
+      out += `<div ${dl} class="ed-line r-callout${strong ? ' strong' : ''}">`
+        + `<span class="r-callout-ico" contenteditable="false">${strong ? ICO.danger : ICO.warn}</span>`
+        + `${edSyn(m[1] + m[2])}<span>${inlineSource(m[3])}</span></div>`;
+      continue;
+    }
+    if(m = t.match(RE.totalLine)){
+      out += `<div ${dl} class="ed-line r-total"><b>${esc(m[1])}${m[2] || ''}</b> ${inlineSource(m[3])}</div>`;
+      continue;
+    }
+    if(m = t.match(/^(\d+\.)(\s+)(.*)$/)){
+      out += `<div ${dl} class="ed-line r-num">${esc(m[1] + m[2])}${inlineSource(m[3])}</div>`;
+      continue;
+    }
+    if(m = t.match(/^([-*])(\s+)(.*)$/)){
+      out += `<div ${dl} class="ed-line r-li">${edSyn(m[1] + m[2])}${inlineSource(m[3])}</div>`;
+      continue;
+    }
+    if(/^\|.*\|$/.test(t)){ out += `<div ${dl} class="ed-line ed-table">${esc(t)}</div>`; continue; }
+    if(m = t.match(/^(>\s?)(.*)$/)){ out += `<div ${dl} class="ed-line ed-quote">${edSyn(m[1])}${inlineSource(m[2])}</div>`; continue; }
+
+    out += `<div ${dl} class="ed-line r-p">${inlineSource(t)}</div>`;
+  }
+  return out;
+}
