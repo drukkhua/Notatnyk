@@ -1,4 +1,4 @@
-import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys } from './parser.js';
+import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines } from './parser.js';
 import { I18N, LANGS } from './i18n.js';
 
 // --- fs через глобальный Tauri API (withGlobalTauri) ---
@@ -233,6 +233,7 @@ function select(id){
   loadFolds();            // свёрнутость этой заметки (localStorage), до первого paint
   drawList();
   paint();
+  if(typeof sym !== 'undefined' && !sym.hidden) symPaint(src.value);  // симбиоз-холст под новую заметку
 }
 
 // ── Компактный вид: дерево секций + свёрнутость (порт из BitrixUI) ───────────
@@ -1217,10 +1218,110 @@ document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
   // двойной клик по разделителю — сброс к 50/50
   divider.addEventListener('dblclick', () => { editor.style.flex = ''; localStorage.removeItem(KEY); });
 })();
-$('#segSplit').onclick = ()=>{ split.classList.remove('viewonly');
-  $('#segSplit').classList.add('active'); $('#segView').classList.remove('active'); };
-$('#segView').onclick = ()=>{ split.classList.add('viewonly');
-  $('#segView').classList.add('active'); $('#segSplit').classList.remove('active'); };
+// ── Симбиоз-редактор (β): contenteditable с подсветкой исходника (Э3, шаг B) ─
+// Правит ту же заметку, что и textarea (источник истины — src.value). Показывает
+// подсвеченный ИСХОДНИК (renderSourceLines), не вычисленный рендер, поэтому
+// спецсимволы не ломают виджеты (их нет). Инвариант: textContent строки == строка.
+const sym = $('#sym');
+const editorBody = document.querySelector('.editor-body');
+let symComposing = false;     // IME-композиция (Android/iOS/CJK) — не перерисовываем
+let symTimer = null;
+
+// «Сырой» текст из холста: один top-level <div> = одна строка; &nbsp; → пробел.
+function symReadText(){
+  if(!sym.children.length) return (sym.textContent || '').replace(/ /g, ' ');
+  return [...sym.children].map(c => (c.textContent || '').replace(/ /g, ' ')).join('\n');
+}
+function symPaint(text){ sym.innerHTML = renderSourceLines(text); }
+
+// Курсор: {line — индекс блока, offset — символов до каретки в блоке}.
+function symCaret(){
+  const s = window.getSelection();
+  if(!s || !s.rangeCount) return null;
+  const range = s.getRangeAt(0);
+  if(!sym.contains(range.startContainer)) return null;
+  let block = range.startContainer;
+  while(block && block.parentNode !== sym) block = block.parentNode;
+  if(!block) return null;
+  const line = [...sym.children].indexOf(block);
+  if(line < 0) return null;
+  const pre = document.createRange();
+  pre.selectNodeContents(block);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return { line, offset: pre.toString().length };
+}
+function symRestore(info){
+  if(!info) return;
+  const block = sym.children[info.line];
+  if(!block) return;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  let remaining = info.offset, node; const s = window.getSelection(); if(!s) return;
+  while((node = walker.nextNode())){
+    const len = (node.nodeValue || '').length;
+    if(remaining <= len){
+      const r = document.createRange(); r.setStart(node, remaining); r.collapse(true);
+      s.removeAllRanges(); s.addRange(r); return;
+    }
+    remaining -= len;
+  }
+  const r = document.createRange(); r.selectNodeContents(block); r.collapse(false);
+  s.removeAllRanges(); s.addRange(r);
+}
+
+// Синхронизация после правки: обновляем модель + рендер справа + Σ; во время
+// IME-композиции холст НЕ перерисовываем (иначе теряются символы на Android).
+function symSync(){
+  const text = symReadText();
+  src.value = text;
+  persist();
+  const caret = symComposing ? null : symCaret();
+  paint();                                   // правый рендер + футер Σ — вживую
+  if(!symComposing){ symPaint(text); symRestore(caret); }
+}
+
+sym.addEventListener('input', ()=>{ clearTimeout(symTimer); symTimer = setTimeout(symSync, 250); });
+sym.addEventListener('blur', ()=>{ clearTimeout(symTimer); symSync(); });
+sym.addEventListener('compositionstart', ()=>{ symComposing = true; });
+sym.addEventListener('compositionend', ()=>{ symComposing = false; clearTimeout(symTimer); symSync(); });
+// Вставка — только текст (без чужого HTML)
+sym.addEventListener('paste', e=>{
+  e.preventDefault();
+  const tt = (e.clipboardData || window.clipboardData).getData('text/plain') || '';
+  document.execCommand('insertText', false, tt);
+});
+// Клик по чек-боксу правит [ ]/[x] в тексте
+sym.addEventListener('mousedown', e=>{
+  const box = e.target.closest && e.target.closest('.box[data-toggle]');
+  if(!box) return;
+  e.preventDefault();
+  const i = +box.dataset.toggle;
+  const lines = symReadText().split('\n');
+  if(lines[i] != null){
+    lines[i] = lines[i].replace(/\[([ xX])\]/, (m,c)=> c.toLowerCase()==='x' ? '[ ]' : '[x]');
+    src.value = lines.join('\n');
+    persist(); symPaint(src.value); paint();
+  }
+});
+
+// ── Переключатель вида: Источник ↔ Симбиоз ↔ Только рендер ──────────────────
+let viewMode = 'split';                       // split | sym | view
+function setView(mode){
+  // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
+  if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
+  viewMode = mode;
+  split.classList.toggle('viewonly', mode === 'view');
+  const symOn = mode === 'sym';
+  sym.hidden = !symOn;
+  editorBody.style.display = symOn ? 'none' : '';
+  toolbar.style.display = symOn ? 'none' : '';   // β: тулбар — только в «Источнике»
+  for(const id of ['segSplit','segSym','segView'])
+    $('#'+id).classList.toggle('active', id === 'seg' + mode[0].toUpperCase() + mode.slice(1));
+  if(symOn){ symPaint(src.value); sym.focus(); }
+  paint();
+}
+$('#segSplit').onclick = ()=> setView('split');
+$('#segSym').onclick   = ()=> setView('sym');
+$('#segView').onclick  = ()=> setView('view');
 $('#themeBtn').onclick = ()=>{
   const el = document.documentElement;
   el.setAttribute('data-theme', el.getAttribute('data-theme')==='dark'?'light':'dark');

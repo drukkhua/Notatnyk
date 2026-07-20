@@ -203,6 +203,48 @@ body.col-resizing{cursor:col-resize;user-select:none;}
 .calc-formula{color:var(--formula);}           /* вычисляемая формула — светлее основного текста */
 .calc-eq{color:var(--ink);}                    /* знаки «=» и «→» — цветом основного текста */
 
+/* ── Симбиоз-редактор (β): contenteditable с подсветкой исходника (Э3) ──────
+   Реюзает блочные классы рендера (.r-h1/.r-check/…) для форматирования, но текст
+   остаётся сырым. Разметка серым (.ed-syn), цены подсвечены (.ed-money). */
+.sym{flex:1;min-width:0;overflow:auto;padding:18px 20px;background:var(--paper);
+  color:var(--ink);font-size:14px;line-height:1.6;outline:none;
+  font-family:ui-sans-serif,"Segoe UI",system-ui,-apple-system,sans-serif;
+  white-space:pre-wrap;word-break:break-word;}
+.sym[hidden]{display:none;}
+.sym:focus{outline:none;}
+.sym .ed-line{margin:1px 0;min-height:1.3em;}
+.sym .ed-syn{color:var(--formula);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.85em;}
+.sym .r-h1{font-size:18px;font-weight:800;color:var(--check);margin:4px 0 2px;}
+.sym .r-h2{font-size:16px;font-weight:700;margin:4px 0 2px;}
+.sym .r-h3{font-size:14px;font-weight:700;color:var(--ink-soft);margin:3px 0 1px;}
+.sym .r-num{font-weight:700;}
+.sym .r-li,.sym .r-p{color:var(--ink);}
+.sym .r-total b{font-weight:800;}
+.sym .r-var{color:var(--ink);}
+.sym .r-var .var-formula{color:var(--formula);}
+.sym .r-check{display:flex;align-items:baseline;gap:7px;}
+.sym .r-check .box{flex:none;width:17px;height:17px;align-self:center;border:2px solid var(--check);
+  border-radius:5px;display:inline-grid;place-items:center;color:#fff;cursor:pointer;}
+.sym .r-check .box svg{width:11px;height:11px;stroke-width:3;}
+.sym .r-check.done .box{background:var(--check);}
+.sym .r-check.done .txt{color:var(--done);}
+.sym .r-callout{display:flex;gap:7px;align-items:baseline;padding:4px 9px;border-radius:7px;margin:2px 0;
+  background:var(--callout-bg);border:1px solid var(--callout-line);}
+.sym .r-callout.strong{background:var(--danger-bg);border-color:var(--danger-line);}
+.sym .r-callout-ico{align-self:center;}
+.sym .r-callout-ico svg{display:block;width:14px;height:14px;}
+.sym .ed-rule{color:var(--formula);border-bottom:1px solid var(--line);padding-bottom:1px;}
+.sym .ed-rule.heavy{border-bottom:2px solid var(--line-2);}
+.sym .ed-hidden{color:var(--formula);opacity:.75;}
+.sym .ed-hidden .ed-syn{color:var(--formula);}
+.sym .ed-quote{color:var(--ink-soft);border-left:2px solid var(--line-2);padding-left:8px;}
+.sym .ed-table{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;color:var(--ink-soft);}
+.sym .ed-link{color:var(--focus);text-decoration:underline;text-underline-offset:2px;}
+.sym .ed-money{font-weight:700;color:var(--ink);}
+.sym .ed-money.counted{background:var(--sum-bg);color:var(--sum-tx);border-radius:999px;padding:0 7px;}
+.sym strong{font-weight:800;} .sym em{font-style:italic;} .sym del{color:var(--done);}
+.sym mark{background:var(--mark);color:var(--mark-tx);padding:0 3px;border-radius:3px;}
+
 /* ── Пресет «Документ» (Э1.1): типографика сметы для клиента ────────────────
    Чисто визуальный класс на #out; движок не знает о пресете. Тот же класс
    используется в экспортированном HTML («Отдать клиенту»). Шрифт и размер —
