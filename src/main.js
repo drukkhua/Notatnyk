@@ -332,6 +332,79 @@ function updateFoldAllBtn(){
   btn.textContent = anyCollapsed ? t('expandAll') : t('collapseAll');
 }
 
+// ── Оглавление (Outline): список секций сметы с их Σ; клик — прыжок к секции ──
+// Данные берём из готового дерева groupBlocks(): секция = заголовок #/##/### со
+// сводом roll.sum. Кнопка в шапке видна только когда секций ≥ 2 (иначе бесполезна).
+function outlineEntries(nodes = renderTree, chain = [], acc = []){
+  for(const n of nodes){
+    if(!n.section) continue;
+    const s = n.section;
+    acc.push({ title: s.header.title || '—', level: s.level, line: s.header.line,
+               key: s.key, sum: s.roll.sum, ancestors: chain });
+    outlineEntries(s.children, chain.concat(s.key), acc);
+  }
+  return acc;
+}
+let outlineEl = null;
+function updateOutlineBtn(){
+  const btn = $('#outlineBtn'); if(!btn) return;
+  const few = outlineEntries().length < 2;
+  btn.hidden = few;
+  if(few) closeOutline();
+}
+function ensureOutlineEl(){
+  if(outlineEl) return;
+  outlineEl = document.createElement('div');
+  outlineEl.className = 'outline';
+  outlineEl.hidden = true;
+  document.body.appendChild(outlineEl);
+}
+function outlineOpen(){ return outlineEl && !outlineEl.hidden; }
+function closeOutline(){ if(outlineEl) outlineEl.hidden = true; }
+function toggleOutline(){ outlineOpen() ? closeOutline() : openOutline(); }
+function openOutline(){
+  const entries = outlineEntries();
+  if(entries.length < 2) return;
+  ensureOutlineEl();
+  const nf = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  const cur = topLineOf(out);                    // текущая секция вверху рендера — подсветим
+  let curIdx = -1; entries.forEach((e, i) => { if(e.line <= cur) curIdx = i; });
+  const box = document.createElement('div'); box.className = 'outline-list';
+  entries.forEach((e, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `outline-item lvl${e.level}${i === curIdx ? ' cur' : ''}`;
+    const sum = e.sum > 0 ? `<span class="outline-sum">${nf(e.sum)} ${LOCALE.currency}</span>` : '';
+    b.innerHTML = `<span class="outline-title">${escapeHtml(e.title)}</span>${sum}`;
+    b.onclick = () => jumpToSection(e.line, e.ancestors);
+    box.appendChild(b);
+  });
+  outlineEl.innerHTML = ''; outlineEl.appendChild(box);
+  outlineEl.hidden = false;
+  positionOutline();
+  const on = box.children[curIdx]; if(on) on.scrollIntoView({ block:'nearest' });
+}
+function positionOutline(){
+  const btn = $('#outlineBtn'); if(!btn) return;
+  const r = btn.getBoundingClientRect();
+  const w = outlineEl.offsetWidth || 300;
+  outlineEl.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
+  outlineEl.style.top = (r.bottom + 6) + 'px';
+}
+function scrollSrcToLine(line){
+  const lh = parseFloat(getComputedStyle(src).lineHeight) || 20;
+  src.scrollTop = Math.max(0, line * lh - 20);
+}
+function jumpToSection(line, ancestors){
+  let changed = false;                           // раскрыть свёрнутых предков — иначе шапки нет в DOM
+  for(const k of ancestors) if(currentFolds.has(k)){ currentFolds.delete(k); changed = true; }
+  if(changed){ saveFolds(); drawRender(); collectAnchors(); updateFoldAllBtn(); }
+  scrollPaneToLine(out, line);                   // рендер — канонический «атлас» сметы
+  if(viewMode === 'sym') scrollPaneToLine(sym, line);      // и активный редактор, если виден
+  else if(viewMode === 'source') scrollSrcToLine(line);
+  closeOutline();
+}
+
 function paint(){
   const text = src.value;
   const { stats, checkLineMap, blocks } = render(text);
@@ -340,6 +413,7 @@ function paint(){
   applyFoldDefaults();
   drawRender();
   updateFoldAllBtn();
+  updateOutlineBtn();
 
   docTitle.textContent = titleFrom(text);
   if(stats.checksTotal>0){
@@ -1422,6 +1496,12 @@ $('#delBtn').onclick = deleteCurrent;
 $('#docBtn').onclick = ()=> applyDocMode(!out.classList.contains('doc-mode'));
 $('#exportBtn').onclick = exportNote;
 $('#fontBtn').onclick = openDocDlg;
+$('#outlineBtn').onclick = e => { e.stopPropagation(); toggleOutline(); };
+// оглавление — закрыть по клику вне попапа и по Esc
+document.addEventListener('click', e => {
+  if(outlineOpen() && !outlineEl.contains(e.target) && !e.target.closest('#outlineBtn')) closeOutline();
+});
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && outlineOpen()) closeOutline(); });
 $('#foldAllBtn').onclick = ()=>{
   const keys = allSectionKeys(renderTree);
   const anyCollapsed = keys.some(k => currentFolds.has(k));
