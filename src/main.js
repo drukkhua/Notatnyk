@@ -77,6 +77,7 @@ let query = '';        // строка поиска
 // --- els ---
 const $ = s => document.querySelector(s);
 const noteList = $('#noteList');
+const sidebarEl = $('.sidebar');
 const src = $('#src');
 const out = $('#out');
 const docTitle = $('#docTitle');
@@ -218,7 +219,7 @@ function drawList(){
       + ' ' + d.toLocaleTimeString(T.dateLocale, { hour:'2-digit', minute:'2-digit' });
     li.innerHTML = `<div class="t">${escapeHtml(n.title)}</div>`
       + `<div class="d">${stamp}</div>`;
-    li.onclick = ()=> select(n.id);
+    li.onclick = ()=>{ select(n.id); setDrawer(false); };   // на телефоне закрываем drawer после выбора
     noteList.appendChild(li);
   }
 }
@@ -1780,6 +1781,15 @@ function toggleTheme(){
   el.setAttribute('data-theme', el.getAttribute('data-theme')==='dark'?'light':'dark');
 }
 $('#themeBtn').onclick = toggleTheme;
+
+// ── Мобильный drawer: гамбургер открывает список заметок, затемнение закрывает ─
+function setDrawer(open){
+  sidebarEl.classList.toggle('open', open);
+  const scrim = $('#scrim'); if(scrim) scrim.hidden = !open;
+}
+$('#menuBtn').onclick = ()=> setDrawer(!sidebarEl.classList.contains('open'));
+$('#scrim').onclick = ()=> setDrawer(false);
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && sidebarEl.classList.contains('open')) setDrawer(false); });
 
 // ── Frameless-титлбар ───────────────────────────────────────────────────────
 // Перетаскивание окна — через data-tauri-drag-region (шапка сайдбара + тулбар).

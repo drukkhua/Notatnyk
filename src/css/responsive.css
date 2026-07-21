@@ -1,9 +1,19 @@
 /* responsive.css — телефон/узкий экран (Android/iOS). Грузится ПОСЛЕДНИМ,
    поэтому переопределяет десктопные правила. */
 @media(max-width:640px){
-  .sidebar{position:fixed;z-index:10;height:100%;transform:translateX(-100%);
-    transition:transform .2s;box-shadow:2px 0 12px rgba(0,0,0,.15);}
+  /* Гамбургер (открыть список заметок) — только на телефоне; на десктопе сайдбар всегда виден. */
+  .menu-btn{display:grid;}
+  .sidebar{position:fixed;z-index:10;top:0;bottom:0;height:auto;transform:translateX(-100%);
+    transition:transform .2s;box-shadow:2px 0 16px rgba(0,0,0,.22);
+    padding-left:env(safe-area-inset-left);}
   .sidebar.open{transform:translateX(0);}
+
+  /* Края экрана (iOS вырез/индикатор, Android статус-бар/жесты): env(safe-area-*). */
+  .side-head{padding-top:calc(12px + env(safe-area-inset-top));}
+  .side-foot{padding-bottom:calc(8px + env(safe-area-inset-bottom));}
+  .bar{padding-top:calc(9px + env(safe-area-inset-top));
+    padding-right:calc(14px + env(safe-area-inset-right));}
+
   .split{flex-direction:column;}
   .divider{display:none;}
   /* Телефон: ОДНА поверхность — показываем только выбранную панель, без
@@ -14,15 +24,17 @@
   .split[data-view="view"] .editorpane{display:none;}
   .editorpane{border-bottom:0;}
   /* Футер итогов — плавающий поверх контента (перекрывает панель), всегда виден.
-     Контент прокручивается ПОД ним, поэтому у панелей нижний отступ. */
+     Контент прокручивается ПОД ним, поэтому у панелей нижний отступ (+ safe-area). */
   .footersum{position:absolute;left:0;right:0;bottom:0;z-index:20;
-    padding:9px 14px;font-size:12.5px;}
-  .sym{padding:16px 16px 64px;font-size:15px;}   /* крупнее для пальца + место под футер */
-  .rendered{padding-bottom:64px;}
-  .doc-title{max-width:18ch;}
+    padding:9px 14px calc(9px + env(safe-area-inset-bottom));font-size:12.5px;}
+  .sym{padding:16px 16px calc(72px + env(safe-area-inset-bottom));font-size:15px;}
+  .rendered{padding-bottom:calc(72px + env(safe-area-inset-bottom));}
+  #src{padding-left:18px;padding-bottom:calc(72px + env(safe-area-inset-bottom));font-size:16px;}
+  .search{font-size:16px;}             /* ≥16px — iOS не зумит поле при фокусе */
+  .doc-title{max-width:16ch;}
   .gutter{display:none;}              /* на телефоне ширина дороже номеров */
-  #src{padding-left:18px;padding-bottom:64px;}
-  /* тач-цели ≥ 44px: чек-боксы, шапки секций, чип скрытого (ux-proposal §2) */
+
+  /* тач-цели ≥ 44px + отклик на нажатие */
   .r-check{min-height:44px;}
   .r-check .box{width:24px;height:24px;}
   .r-check .box svg{width:15px;height:15px;}
@@ -30,4 +42,13 @@
   .r-sec-sum{font-size:12px;}
   .r-hidden-head{padding:8px 14px;}
   .fold-all{padding:6px 14px;font-size:12px;}
+  .note-item{padding:12px 12px;}                 /* просторнее под палец */
+  .note-item:active{background:var(--sum-bg);}
+  .ghost:active,.tb-btn:active,.seg-btn:active,.theme-btn:active{opacity:.6;}
+
+  /* Диалоги и палитра — ближе к нижнему краю (удобно большому пальцу) */
+  .cheat{align-items:flex-end;padding:10px 10px calc(10px + env(safe-area-inset-bottom));}
+  .cheat-box{width:100%;max-height:80vh;}
+  .palette-wrap{padding:8vh 10px 10px;}
+  .palette{width:100%;}
 }

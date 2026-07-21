@@ -16,3 +16,6 @@ body{
   border:3px solid transparent;background-clip:padding-box;}
 ::-webkit-scrollbar-thumb:hover{background:var(--src-num);background-clip:padding-box;}
 ::-webkit-scrollbar-corner{background:transparent;}
+/* Мобильная гигиена: без синей вспышки по тапу; инерционный скролл в областях. */
+*{-webkit-tap-highlight-color:transparent;}
+.rendered,.sym,.note-list,.outline,.palette-list,.cheat-box{-webkit-overflow-scrolling:touch;}
