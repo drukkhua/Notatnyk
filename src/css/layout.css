@@ -1,0 +1,68 @@
+/* layout.css — верстка/каркас: сайдбар, рабочая область, панели, разделитель,
+   режимы редактора (data-view), футер итогов. Только структура и контейнеры;
+   кнопки/меню/диалоги — в components.css. */
+#app{display:flex;height:100vh;}
+
+/* sidebar */
+.sidebar{
+  width:230px;flex:none;display:flex;flex-direction:column;
+  background:var(--paper);border-right:1px solid var(--line-2);
+}
+.side-head{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;border-bottom:1px solid var(--line);}
+.logo{font-weight:700;font-size:15px;letter-spacing:-.02em;}
+.sigma{color:var(--check);font-family:Georgia,serif;font-weight:700;}
+.search{margin:8px 10px 2px;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px;
+  background:var(--paper-2);color:var(--ink);font-size:13px;outline:none;}
+.search:focus{border-color:var(--focus);}
+.note-list{flex:1;overflow:auto;list-style:none;padding:6px;}
+.note-empty{padding:14px 12px;font-size:12px;color:var(--ink-soft);text-align:center;}
+.side-foot{display:flex;gap:6px;padding:0 8px 8px;}
+.side-foot .theme-btn{flex:1;margin:0;}
+.note-item{padding:9px 10px;border-radius:10px;cursor:pointer;margin-bottom:2px;
+  transition:background .12s;}
+.note-item:hover{background:var(--paper-2);}
+.note-item.active{background:var(--sum-bg);}
+.note-item .t{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.note-item .d{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+
+/* workspace */
+.workspace{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;}
+.bar{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 14px;background:var(--paper);border-bottom:1px solid var(--line);}
+.bar-left{display:flex;align-items:center;gap:10px;min-width:0;}
+.doc-title{font-size:13px;font-weight:600;color:var(--ink-soft);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40ch;}
+.counter{font-size:11px;font-weight:700;color:#fff;background:var(--green);
+  padding:2px 10px;border-radius:999px;}
+.bar-right{display:flex;align-items:center;gap:8px;}
+
+/* split */
+.split{flex:1;display:flex;min-height:0;}
+/* min-height:0 обязателен: иначе flex-панель разрастается по контенту и
+   внутренняя прокрутка (overflow:auto у .rendered/.sym) не включается,
+   а футер выдавливается за экран (особенно на телефоне, column). */
+.pane{flex:1;min-width:0;min-height:0;display:flex;}
+.editorpane{flex-direction:column;min-height:0;}
+.divider{flex:none;width:7px;cursor:col-resize;background:var(--line-2);
+  transition:background .15s;}
+.divider:hover,body.col-resizing .divider{background:var(--check);}
+body.col-resizing{cursor:col-resize;user-select:none;}
+/* ── Режимы редактора (data-view на #split): source | sym | view ────────────
+   Десктоп: source/sym — выбранный редактор СЛЕВА + рендер справа; view — только
+   рендер. Показ панелей — здесь, JS лишь ставит data-view (setView). */
+#sym{display:none;}                                   /* по умолчанию скрыт */
+.split[data-view="sym"] .editor-body{display:none;}
+.split[data-view="sym"] .toolbar{display:none;}       /* β: тулбар только в источнике */
+.split[data-view="sym"] #sym{display:block;}
+.split[data-view="view"] .editorpane{display:none;}
+.split[data-view="view"] .divider{display:none;}
+
+/* footer */
+/* Футер с итогами: всегда виден, приподнят тенью над контентом (z-index). */
+.footersum{display:flex;align-items:center;justify-content:space-between;flex:none;
+  padding:11px 16px;border-top:1px solid var(--line);background:var(--paper-2);font-size:14px;
+  position:relative;z-index:15;box-shadow:0 -3px 12px rgba(15,19,27,.10);}
+#sumLabel b{color:var(--sum-tx);}
+.footersum .ok{color:var(--green);font-weight:700;font-size:12px;}
+.footersum .bad{color:#d3452f;font-weight:700;font-size:12px;}

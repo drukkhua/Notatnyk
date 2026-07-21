@@ -1,0 +1,117 @@
+/* render.css — рендер заметки: типографика и блоки (заголовки, списки, чекбоксы,
+   выноски, цитата клиента, таблицы, разделители), пресет «Документ», секции и
+   скрытый блок. Денежные чипы/формулы/итоги — в money.css.
+   ВАЖНО: эти правила уходят и в ЭКСПОРТ (клиентский .html) — БЕЗ color-mix,
+   только явные цвета (у клиента может быть старый браузер). */
+.rendered{flex:1;overflow:auto;padding:20px 24px;background:var(--paper);
+  font-size:14.5px;line-height:1.5;}
+.rendered>*:first-child{margin-top:0;}
+
+/* blocks */
+.r-h1{font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.01em;color:var(--check);}
+.r-h2{font-size:16px;font-weight:700;margin:14px 0 6px;}
+.r-h3{font-size:13.5px;font-weight:700;color:var(--ink-soft);margin:12px 0 5px;}
+.r-num{font-size:14px;font-weight:700;margin:3px 0;}
+.r-li{color:var(--ink-soft);margin:3px 0 3px 18px;position:relative;font-size:13.5px;line-height:1.55;}
+.r-li::before{content:"•";position:absolute;left:-14px;color:var(--line-2);font-weight:700;}
+.r-p{color:var(--ink-soft);margin:3px 0;font-size:13.5px;line-height:1.55;}
+.r-check{display:flex;align-items:center;gap:9px;margin:7px 0;cursor:pointer;user-select:none;}
+.r-check .box{flex:none;width:20px;height:20px;border:2px solid var(--check);border-radius:6px;
+  display:grid;place-items:center;color:#fff;}
+.r-check .box svg{width:13px;height:13px;stroke-width:3;}
+.r-check.done .box{background:var(--check);border-color:var(--check);}
+.r-check .txt{font-weight:700;color:var(--check);}
+.r-check.done .txt{color:var(--done);text-decoration:line-through;}
+.r-check .stamp{font-size:11px;font-weight:700;color:var(--check);}
+/* Callout: ! — warning (янтарный), !! — danger (красный). Мягкая заливка, без полос. */
+.r-callout{display:flex;gap:10px;align-items:flex-start;background:var(--callout-bg);
+  border:1px solid var(--callout-line);border-radius:10px;
+  padding:10px 14px;margin:10px 0;color:var(--callout-tx);font-weight:500;line-height:1.5;}
+.r-callout.strong{background:var(--danger-bg);border-color:var(--danger-line);
+  color:var(--danger-tx);font-weight:600;}
+.r-callout-ico{flex:none;margin-top:2px;}
+.r-callout-ico svg{display:block;width:16px;height:16px;}
+/* Цитата клиента «> @Имя» — карточка на тональной подложке, кавычка слева
+   (та же сетка «иконка + контент», что у callout) */
+.r-quote{display:grid;grid-template-columns:16px 1fr;column-gap:10px;
+  margin:12px 0;padding:12px 14px;border-radius:12px;background:var(--paper-2);}
+.r-quote-ico{grid-column:1;grid-row:1;margin-top:3px;color:var(--ink-soft);opacity:.5;}
+.r-quote-ico svg{display:block;width:16px;height:16px;}
+.r-quote-client{grid-column:2;display:flex;align-items:baseline;gap:8px;margin-bottom:7px;}
+.r-quote-ava{flex:none;align-self:center;width:22px;height:22px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--sum-bg);color:var(--sum-tx);font-size:11px;font-weight:700;}
+.r-quote-name{font-size:13px;font-weight:600;color:var(--ink);}
+.r-quote-role{font-size:10px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-soft);}
+.r-quote-body{color:var(--ink);font-size:13.5px;line-height:1.6;grid-column:2;}
+.r-hr{border:0;border-top:1px solid var(--sep);margin:12px 0;}
+.r-hr2{border:0;border-top:2px solid var(--line-2);margin:6px 0;}
+.r-table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px;}
+.r-table td{border:1px solid var(--line);padding:7px 10px;vertical-align:top;color:var(--ink);}
+.r-tr-head td{background:var(--paper-2);color:var(--ink);font-weight:700;
+  font-size:12px;text-transform:uppercase;letter-spacing:.03em;border-color:var(--line-2);}
+.rendered strong{font-weight:800;color:var(--ink);}
+.rendered em{font-style:italic;}
+.rendered del{color:var(--done);}
+.rendered mark{background:var(--mark);color:var(--mark-tx);padding:1px 5px;border-radius:4px;}
+.rendered a{color:var(--focus);text-underline-offset:2px;word-break:break-all;}
+
+/* ── Пресет «Документ» (Э1.1): типографика сметы для клиента ────────────────
+   Чисто визуальный класс на #out; движок не знает о пресете. Тот же класс
+   используется в экспортированном HTML («Отдать клиенту»). Шрифт и размер —
+   через --doc-font/--doc-size (меню «Aa»). */
+/* Внутри пресета ВСЕ размеры — в em от --doc-size: только так S/M/L из меню
+   «Aa» масштабирует документ целиком (px-размеры глушили бы наследование). */
+.rendered.doc-mode{font-family:var(--doc-font);
+  font-size:var(--doc-size);line-height:1.68;padding:34px 46px;}
+.doc-mode .r-h1{font-size:1.73em;font-weight:700;color:var(--ink);letter-spacing:0;
+  border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:16px;}
+.doc-mode .r-h2{font-size:1.27em;margin:22px 0 9px;}
+.doc-mode .r-h3{font-size:1em;color:var(--ink);}
+.doc-mode .r-num{font-size:1.03em;margin:6px 0;}
+.doc-mode .r-li,.doc-mode .r-p{font-size:0.97em;color:var(--ink);line-height:1.65;}
+.doc-mode .r-total{font-size:1.2em;margin:14px 0;}
+.doc-mode .price-sum,.doc-mode .calc-res{font-size:1em;padding:2px 12px;}
+.doc-mode .r-table{font-size:0.93em;}
+.doc-mode .r-table td{padding:9px 12px;}
+.doc-mode .r-quote{background:transparent;border-left:3px solid var(--line-2);
+  border-radius:0;padding:8px 14px;}
+.doc-mode .r-quote-body{font-size:0.97em;}
+.doc-mode .r-callout{font-size:0.97em;}
+.doc-mode .r-var{font-size:0.9em;}
+.doc-mode .r-check{cursor:default;}
+
+/* ── Компактный вид: сворачиваемые секции (порт из BitrixUI) ────────────────── */
+/* .r-sec — обёртка секции; шапка кликабельна (свернуть/развернуть). Свёрнутая
+   показывает свод «1/4 ✓ · Итого: N». Каретка ▸→▾. */
+.r-sec{display:block;}
+.r-sec-head{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
+  padding:3px 6px;margin:8px -6px 4px;border-radius:7px;outline:none;}
+.r-sec.lvl1>.r-sec-head{margin-top:2px;}
+.r-sec-head:hover{background:var(--paper-2);}
+.r-sec-head:focus-visible{box-shadow:0 0 0 2px var(--sum-bg);}
+.rendered>.r-sec:first-child>.r-sec-head{margin-top:0;}
+.r-sec-caret{flex:none;width:7px;height:7px;margin:0 3px 0 1px;
+  border-right:2px solid var(--ink-soft);border-bottom:2px solid var(--ink-soft);
+  transform:rotate(-45deg);transition:transform .15s ease;}
+.r-sec:not(.collapsed)>.r-sec-head .r-sec-caret{transform:rotate(45deg);}
+.r-sec-head .r-sec-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* шапка секции наследует размеры r-h1/2/3, но без их margin (они уже в .r-sec-head) */
+.r-sec-head.r-h1,.r-sec-head.r-h2,.r-sec-head.r-h3{margin-left:-6px;margin-right:-6px;}
+.r-sec-sum{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--sum-tx);
+  background:var(--sum-bg);border:1px solid var(--sum-line);border-radius:999px;
+  padding:1px 9px;white-space:nowrap;}
+.r-sec-body{display:block;}
+
+/* Скрытый блок /* */ → чип «🙈 внутренние расчёты (N)», раскрываемый (только в рабочем виде) */
+.r-hidden{margin:8px 0;}
+.r-hidden-head{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+  list-style:none;font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--paper-2);
+  border:1px dashed var(--line-2);border-radius:999px;padding:3px 11px;}
+.r-hidden-head::-webkit-details-marker{display:none;}
+.r-hidden[open]>.r-hidden-head{border-style:solid;border-radius:8px 8px 0 0;}
+.r-hidden-n{color:var(--formula);font-weight:500;}
+.r-hidden-body{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12px;
+  color:var(--formula);line-height:1.6;padding:8px 12px;border:1px dashed var(--line-2);
+  border-top:0;border-radius:0 0 8px 8px;white-space:pre-wrap;word-break:break-word;}

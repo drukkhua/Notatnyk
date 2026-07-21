@@ -940,7 +940,8 @@ function shortHash(s){
   return h.toString(16).padStart(8, '0');
 }
 
-// Добавка к styles.css для автономной страницы: центрируем «лист», плавающая
+// Добавка к рендер-стилям (css/render.css + money.css) для автономной страницы:
+// центрируем «лист», плавающая
 // кнопка печати, чистые поля при печати. Тема — всегда светлая (документ).
 const EXPORT_CSS = `
 body.export{overflow:auto;background:#eef0f4;}
@@ -999,8 +1000,16 @@ async function exportNote(){
   ${pay.url ? `<a class="exp-pay" href="${escapeHtml(pay.url)}" target="_blank" rel="noopener">${t('payBtn')}${depositTxt ? ` · ${depositTxt}` : ''}</a>` : ''}
 </div>`;
 
+  // Инлайним в клиентский .html только CSS, влияющий на РЕНДЕР сметы: токены,
+  // база, рендер, деньги. Хром (layout/components/editor/responsive) в экспорт
+  // не нужен. Эти файлы намеренно без color-mix — у клиента может быть старый браузер.
   let css = '';
-  try{ css = await (await fetch('styles.css')).text(); }catch{}
+  try{
+    const parts = await Promise.all(
+      ['tokens', 'base', 'render', 'money'].map(f =>
+        fetch(`css/${f}.css`).then(r => r.text()).catch(() => '')));
+    css = parts.join('\n');
+  }catch{}
   // выбранный шрифт/размер документа уезжает вместе со сметой
   const fontCss = `:root{--doc-font:${(DOC_FONTS[docFont]||DOC_FONTS.sans).stack};--doc-size:${docSize}px;}`;
   const page = `<!DOCTYPE html>
@@ -1336,7 +1345,7 @@ sym.addEventListener('mousedown', e=>{
 // Всё показ/скрытие панелей — через data-view на #split (CSS). Десктоп: источник
 // и симбиоз показывают выбранный редактор СЛЕВА + рендер справа; «Рендер» — только
 // рендер. Телефон (@media ≤640): показывается ТОЛЬКО одна панель, без разделения
-// экрана (симбиоз по умолчанию), см. styles.css.
+// экрана (симбиоз по умолчанию), см. css/responsive.css.
 let viewMode = 'source';                      // source | sym | view
 function setView(mode){
   // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)

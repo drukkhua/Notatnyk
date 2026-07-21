@@ -1,0 +1,28 @@
+/* tokens.css — дизайн-токены: палитра, тема, шрифт документа.
+   Всё через CSS-переменные; светлая «бумажная» тема по умолчанию + [data-theme=dark].
+   Меняешь цвет здесь — меняется во всём приложении. */
+:root{
+  --ink:#1a1f2b; --ink-soft:#5b6577; --formula:#a2acbd; --paper:#ffffff; --paper-2:#f4f5f7;
+  --line:#e7e9ee; --line-2:#d7dbe3; --sep:#e2e5ec; --bg:#f7f8fa;
+  --sum-bg:#e8ecfb; --sum-tx:#3350c8; --sum-line:#c9d3f6;
+  --mark:#ffe27a; --mark-tx:#5a4708; --mark-line:#e8c034;
+  --callout-bg:#fffbeb; --callout-line:#f5e3a8; --callout-tx:#92620e;
+  --danger-bg:#fef2f2; --danger-line:#fbd5d5; --danger-tx:#b42318;
+  --check:#2f6df0; --done:#8b93a1; --green:#28a76a; --focus:#2f6df0;
+  --src-bg:#e9ecf2; --src-num:#9aa3b3;   /* фон источника темнее бумаги; номера строк */
+  /* Шрифт вида «Документ» и экспорта. Переключается из меню «Aa» (main.js,
+     DOC_FONTS): системные кросс-ОС стеки с кириллицей и РОВНЫМИ (lining)
+     цифрами — смета состоит из цифр, минускульные цифры (Georgia) запрещены. */
+  --doc-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif;
+  --doc-size:15px;
+}
+[data-theme="dark"]{
+  --ink:#e8ebf2; --ink-soft:#9aa3b5; --formula:#5f6878; --paper:#161b26; --paper-2:#1d2330;
+  --line:#2a3140; --line-2:#333c4e; --sep:#2a3140; --bg:#0f131b;
+  --sum-bg:#22305e; --sum-tx:#aec2ff; --sum-line:#38508f;
+  --mark:#6b5a22; --mark-tx:#ffe9a8; --mark-line:#8a7530;
+  --callout-bg:#2b2312; --callout-line:#57451c; --callout-tx:#f0cf7e;
+  --danger-bg:#2e1717; --danger-line:#5f2a27; --danger-tx:#f29d95;
+  --check:#5b8cff; --done:#6b7385; --green:#2fbd7e; --focus:#6b8cff;
+  --src-bg:#212a3b; --src-num:#5a6579;   /* в тёмной теме источник светлее бумаги */
+}

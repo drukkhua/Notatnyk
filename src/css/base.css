@@ -1,0 +1,10 @@
+/* base.css — сброс, корневые элементы, фокус. Общая основа для всего UI. */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+button{transition:background .12s,border-color .12s,color .12s,opacity .12s;}
+:is(button,input,textarea):focus-visible{outline:2px solid var(--focus);outline-offset:1px;}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,"Segoe UI",system-ui,-apple-system,"Noto Sans",sans-serif;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
