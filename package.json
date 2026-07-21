@@ -2,6 +2,8 @@
   "name": "notatnyk",
   "version": "1.0.0",
   "description": "Лёгкий блокнот с кастомным синтаксисом и авто-суммой Σ",
+  "author": "Aleksieiev Valentyn",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

@@ -25,8 +25,18 @@ dist/
 .claude/settings.local.json
 
 # Private / real data — never publish (public repo).
-# notes-testing/ ships the 10 demo estimates (.md) as bundled demo content;
-# exported HTML and any real note (e.g. tax requisites) stay local only.
-notes-testing/*.html
-notes-testing/910f0174-*.md
+# notes-testing/ ships ONLY the 10 curated demo estimates (bundled as demo content).
+# Whitelist them and ignore everything else the app may drop here (real notes,
+# HTML exports, archives) so nothing private can leak into a public repo.
+notes-testing/*
+!notes-testing/book-club.md
+!notes-testing/elektromontazh.md
+!notes-testing/gazon-ozelenenie.md
+!notes-testing/gruzoperevozki.md
+!notes-testing/klining.md
+!notes-testing/kofejnya-launch.md
+!notes-testing/konditsionery.md
+!notes-testing/kuhnya-na-zakaz.md
+!notes-testing/natyazhnye-potolki.md
+!notes-testing/remont-kvartiry.md
 config.json
