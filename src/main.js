@@ -1797,9 +1797,13 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape' && sidebarEl.c
 // Windows: окно без рамки (decorations:false) — рисуем min/max/close сами.
 (function initWindowChrome(){
   const ua = navigator.userAgent || '';
-  const plat = /Mac/i.test(ua) ? 'mac' : /Win/i.test(ua) ? 'win' : 'other';
+  // Мобильные — раньше desktop-mac: iOS UA содержит «Mac OS X», иначе iPhone принялся бы за мак.
+  const plat = /Android/i.test(ua) ? 'android'
+    : /iPhone|iPad|iPod/i.test(ua) ? 'ios'
+    : /Mac/i.test(ua) ? 'mac'
+    : /Win/i.test(ua) ? 'win' : 'other';
   document.body.dataset.platform = plat;
-  if(plat !== 'win') return;                    // свои кнопки окна — только на Windows
+  if(plat !== 'win') return;                    // свои кнопки окна — только на Windows (desktop)
   const W = window.__TAURI__ && window.__TAURI__.window;
   if(!W || !W.getCurrentWindow) return;
   const win = W.getCurrentWindow();
