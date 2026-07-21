@@ -196,3 +196,10 @@
 .win-btn:hover{background:var(--paper-2);color:var(--ink);}
 .win-btn svg{width:12px;height:12px;stroke:currentColor;}
 .win-close:hover{background:#e5484d;color:#fff;}
+
+/* ── Мобильная панель вставки над клавиатурой (показ — в responsive.css) ─────*/
+.mtoolbar{display:none;}
+.mt-btn{flex:none;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r-2);
+  background:var(--paper);color:var(--ink);font-size:13px;line-height:1.2;cursor:pointer;
+  white-space:nowrap;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+.mt-btn:active{background:var(--sum-bg);border-color:var(--sum-line);color:var(--sum-tx);}

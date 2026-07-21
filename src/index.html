@@ -2,7 +2,7 @@
 <html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Notatnyk</title>
   <!-- Стили разбиты по смыслу (порядок = каскад: токены → база → верстка → ...). -->
   <link rel="stylesheet" href="css/tokens.css" />
@@ -109,6 +109,9 @@
         <span id="sumLabel"></span>
         <span id="sumState" class="ok">—</span>
       </footer>
+      <!-- Липкая панель вставки над клавиатурой (только телефон, при фокусе редактора).
+           Горизонтальная прокрутка; кнопки вставляют наши паттерны в активную панель. -->
+      <div id="mtoolbar" class="mtoolbar" hidden></div>
     </main>
 
     <div id="cheat" class="cheat" hidden>

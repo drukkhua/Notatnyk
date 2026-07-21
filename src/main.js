@@ -858,6 +858,7 @@ function buildToolbar(){
     empty = false;
   }
   updateToolbarState();
+  buildMToolbar();                                  // мобильная панель вставки — тем же языком
 }
 
 // --- подсветка «активных» кнопок: их синтаксис уже действует там, где курсор ---
@@ -1549,6 +1550,52 @@ function chooseSlashSym(){
   symApplyInsert(ctx, slashInsertSpec(it));
 }
 
+// ── Мобильная панель вставки над клавиатурой ────────────────────────────────
+// Показывается на телефоне при фокусе редактора; горизонтальный скролл кнопок-
+// паттернов. Вставка — в активную панель (Исходник → примитивы тулбара; Симбиоз →
+// построчно). Позиция над клавиатурой держится через visualViewport.
+function insertPattern(it){
+  if(viewMode !== 'sym'){ src.focus(); runSlashSrc(it); return; }
+  const c = symCaret() || { line: 0, offset: 0 };
+  if(it.table){ symTableCtx = { line:c.line, wsLen:c.offset, offset:c.offset }; openTableDlg(); return; }
+  const at = it.prefix ? 0 : c.offset;             // построчные (##, -, > …) — в начало строки
+  symApplyInsert({ line:c.line, wsLen:at, offset:at }, slashInsertSpec(it));
+}
+function buildMToolbar(){
+  const mt = $('#mtoolbar'); if(!mt) return;
+  mt.innerHTML = '';
+  for(const it of slashItems()){
+    if(it.hideBlock) continue;                     // скрытый блок — не для быстрой панели
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mt-btn';
+    b.textContent = it.label; b.title = it.desc;
+    b.onmousedown = e => e.preventDefault();        // не терять фокус/каретку редактора
+    b.onclick = () => insertPattern(it);
+    mt.appendChild(b);
+  }
+}
+function placeMToolbar(){                           // держим панель над экранной клавиатурой
+  const mt = $('#mtoolbar'); if(!mt) return;
+  const vv = window.visualViewport;
+  mt.style.bottom = (vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0) + 'px';
+}
+function setEditing(on){
+  const narrow = window.matchMedia('(max-width:640px)').matches;
+  document.body.classList.toggle('editing', on && narrow);
+  if(on && narrow) placeMToolbar();
+}
+[src, sym].forEach(el => {
+  el.addEventListener('focus', () => setEditing(true));
+  el.addEventListener('blur', () => setTimeout(() => {   // тап по кнопке панели фокус не снимает
+    if(document.activeElement !== src && document.activeElement !== sym) setEditing(false);
+  }, 150));
+});
+if(window.visualViewport){
+  const onVV = () => { if(document.body.classList.contains('editing')) placeMToolbar(); };
+  window.visualViewport.addEventListener('resize', onVV);
+  window.visualViewport.addEventListener('scroll', onVV);
+}
+
 // --- events ---
 src.addEventListener('input', ()=>{ expandDateAtCursor(); persist(); paint(); });
 // slash-меню «/»: детект по вводу; клавиши навигации; репозиция/закрытие
@@ -1624,9 +1671,16 @@ document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
   const KEY = 'notatnyk.split';
   const isMobile = () => window.matchMedia('(max-width:640px)').matches;
   const apply = f => { editor.style.flex = `0 0 ${(f*100).toFixed(2)}%`; };
-  // восстановить сохранённую ширину (только на широком экране)
+  // На узком экране редактор — на весь экран: снимаем инлайновый flex десктоп-
+  // разделителя (иначе в колоночной раскладке он становится ограничением ВЫСОТЫ ~50%).
   const saved = parseFloat(localStorage.getItem(KEY));
-  if(!isMobile() && saved > 0.15 && saved < 0.85) apply(saved);
+  const mq = window.matchMedia('(max-width:640px)');
+  const syncSplit = () => {
+    if(mq.matches) editor.style.flex = '';
+    else if(saved > 0.15 && saved < 0.85) apply(saved);
+  };
+  mq.addEventListener('change', syncSplit);
+  syncSplit();
 
   let dragging = false;
   const onMove = e => {
