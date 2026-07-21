@@ -45,6 +45,7 @@ export const I18N = {
     lblCurrency:'Валюта', lblTotal:'Слово итога', lblDone:'Штамп «готово»',
     lblUnit:'Единица (за шт)', lblYear:'Суффикс года', lblPositions:'Слово «позиций»', save:'Сохранить',
     emptyList:'Нет заметок', notFound:'Ничего не найдено', printed:'отпечатано', colHeader:'Заголовок',
+    palettePh:'Заметки и команды…', cmdBadge:'команда', cmdExport:'Отдать клиенту',
     confirmDel:'Удалить «{t}»?', initError:'Ошибка инициализации хранилища',
     matchOk:'✓ Совпадает с подсчётом', mismatch:'✕ Σ подсчёта {x} (разница {d})', sumWord:'Всего',
 
@@ -112,6 +113,7 @@ export const I18N = {
     lblCurrency:'Валюта', lblTotal:'Слово підсумку', lblDone:'Штамп «готово»',
     lblUnit:'Одиниця (за шт)', lblYear:'Суфікс року', lblPositions:'Слово «позицій»', save:'Зберегти',
     emptyList:'Немає нотаток', notFound:'Нічого не знайдено', printed:'відпечатано', colHeader:'Заголовок',
+    palettePh:'Нотатки та команди…', cmdBadge:'команда', cmdExport:'Віддати клієнту',
     confirmDel:'Видалити «{t}»?', initError:'Помилка ініціалізації сховища',
     matchOk:'✓ Збігається з підрахунком', mismatch:'✕ Σ підрахунку {x} (різниця {d})', sumWord:'Разом',
 
@@ -179,6 +181,7 @@ export const I18N = {
     lblCurrency:'Currency', lblTotal:'Total word', lblDone:'Done stamp',
     lblUnit:'Unit (per pc)', lblYear:'Year suffix', lblPositions:'“Items” word', save:'Save',
     emptyList:'No notes', notFound:'Nothing found', printed:'printed', colHeader:'Header',
+    palettePh:'Notes and commands…', cmdBadge:'command', cmdExport:'Send to client',
     confirmDel:'Delete “{t}”?', initError:'Storage initialization error',
     matchOk:'✓ Matches the calculation', mismatch:'✕ Σ calc {x} (diff {d})', sumWord:'Total',
 

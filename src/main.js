@@ -420,6 +420,87 @@ function jumpToSection(line, ancestors){
   closeOutline();
 }
 
+// ── Командная палитра (Cmd/Ctrl+K): быстрый переход к заметке + частые действия ─
+// Пустой запрос — все заметки (свежие сверху). Печатаешь — фильтр по заголовку/телу
+// (та же нормализация key(), что и боковой поиск) + команды, совпавшие по названию.
+let paletteEl = null, palInput = null, palListEl = null, palItems = [], palIdx = 0;
+function paletteCommands(){
+  return [
+    { label: t('newNote'),      keys:'new note новая заметка смета создать', run: newNote },
+    { label: t('cmdExport'),    keys:'export экспорт отдать клиенту pdf',    run: exportNote },
+    { label: t('fontTitle'),    keys:'font шрифт документ',                  run: openDocDlg },
+    { label: t('settingsTitle'),keys:'settings настройки язык ключевые слова', run: openLocaleDlg },
+    { label: t('help'),         keys:'help справка шпаргалка синтаксис',     run: ()=>{ cheat.hidden = false; } },
+    { label: t('theme'),        keys:'theme тема тёмная светлая dark light', run: toggleTheme },
+  ];
+}
+function ensurePalette(){
+  if(paletteEl) return;
+  paletteEl = document.createElement('div');
+  paletteEl.className = 'palette-wrap';
+  paletteEl.hidden = true;
+  paletteEl.innerHTML = '<div class="palette"><input class="palette-input" type="text" spellcheck="false" /><div class="palette-list"></div></div>';
+  document.body.appendChild(paletteEl);
+  palInput = paletteEl.querySelector('.palette-input');
+  palListEl = paletteEl.querySelector('.palette-list');
+  palInput.addEventListener('input', renderPalette);
+  palInput.addEventListener('keydown', onPaletteKey);
+  paletteEl.addEventListener('mousedown', e => { if(e.target === paletteEl) closePalette(); });
+}
+function paletteOpen(){ return paletteEl && !paletteEl.hidden; }
+function closePalette(){ if(paletteEl) paletteEl.hidden = true; }
+function openPalette(){
+  ensurePalette();
+  palInput.value = '';
+  palInput.placeholder = t('palettePh');
+  paletteEl.hidden = false;
+  renderPalette();
+  palInput.focus();
+}
+function togglePalette(){ paletteOpen() ? closePalette() : openPalette(); }
+function buildPalItems(qRaw){
+  const q = key(qRaw);
+  let ns = notes.map(n => ({ kind:'note', label: n.title || t('untitled'), updated: n.updated,
+                             body: n.body, run: ()=>{ closePalette(); select(n.id); } }));
+  if(q) ns = ns.filter(n => key(n.label + ' ' + (n.body || '')).includes(q))
+              .sort((a, b) => (key(a.label).includes(q) ? 0 : 1) - (key(b.label).includes(q) ? 0 : 1)
+                              || b.updated - a.updated);
+  else  ns = ns.sort((a, b) => b.updated - a.updated);
+  let cs = [];
+  if(q) cs = paletteCommands()
+              .filter(c => key(c.label + ' ' + c.keys).includes(q))
+              .map(c => ({ kind:'cmd', label: c.label, run: ()=>{ closePalette(); c.run(); } }));
+  return [...ns, ...cs];
+}
+function renderPalette(){
+  palItems = buildPalItems(palInput.value);
+  palIdx = 0;
+  if(!palItems.length){ palListEl.innerHTML = `<div class="palette-empty">${escapeHtml(t('notFound'))}</div>`; return; }
+  palListEl.innerHTML = '';
+  palItems.forEach((it, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'palette-item' + (i === palIdx ? ' on' : '');
+    const badge = it.kind === 'cmd' ? `<span class="palette-badge">${escapeHtml(t('cmdBadge'))}</span>` : '';
+    b.innerHTML = `<span class="palette-label">${escapeHtml(it.label)}</span>${badge}`;
+    b.onmousedown = e => { e.preventDefault(); it.run(); };
+    b.onmousemove = () => { if(palIdx !== i){ palIdx = i; paintPalActive(); } };
+    palListEl.appendChild(b);
+  });
+}
+function paintPalActive(){
+  const els = palListEl.querySelectorAll('.palette-item');
+  els.forEach((el, i) => el.classList.toggle('on', i === palIdx));
+  const on = els[palIdx]; if(on) on.scrollIntoView({ block:'nearest' });
+}
+function movePal(d){ if(!palItems.length) return; palIdx = (palIdx + d + palItems.length) % palItems.length; paintPalActive(); }
+function onPaletteKey(e){
+  if(e.key === 'ArrowDown'){ e.preventDefault(); movePal(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); movePal(-1); }
+  else if(e.key === 'Enter'){ e.preventDefault(); const it = palItems[palIdx]; if(it) it.run(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closePalette(); }
+}
+
 function paint(){
   const text = src.value;
   const { stats, checkLineMap, blocks } = render(text);
@@ -1517,6 +1598,12 @@ document.addEventListener('click', e => {
   if(outlineOpen() && !outlineEl.contains(e.target) && !e.target.closest('#outlineBtn')) closeOutline();
 });
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && outlineOpen()) closeOutline(); });
+// Командная палитра: Cmd/Ctrl+K из любого места
+document.addEventListener('keydown', e => {
+  if((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k'){
+    e.preventDefault(); togglePalette();
+  }
+});
 $('#foldAllBtn').onclick = ()=>{
   const keys = allSectionKeys(renderTree);
   const anyCollapsed = keys.some(k => currentFolds.has(k));
@@ -1688,10 +1775,11 @@ function setView(mode){
 $('#segSplit').onclick = ()=> setView('source');
 $('#segSym').onclick   = ()=> setView('sym');
 $('#segView').onclick  = ()=> setView('view');
-$('#themeBtn').onclick = ()=>{
+function toggleTheme(){
   const el = document.documentElement;
   el.setAttribute('data-theme', el.getAttribute('data-theme')==='dark'?'light':'dark');
-};
+}
+$('#themeBtn').onclick = toggleTheme;
 
 // --- seed sample ---
 async function seed(){
