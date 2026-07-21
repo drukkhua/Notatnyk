@@ -1584,17 +1584,8 @@ function setEditing(on){
   document.body.classList.toggle('editing', on && narrow);
   if(on && narrow) placeMToolbar();
 }
-[src, sym].forEach(el => {
-  el.addEventListener('focus', () => setEditing(true));
-  el.addEventListener('blur', () => setTimeout(() => {   // тап по кнопке панели фокус не снимает
-    if(document.activeElement !== src && document.activeElement !== sym) setEditing(false);
-  }, 150));
-});
-if(window.visualViewport){
-  const onVV = () => { if(document.body.classList.contains('editing')) placeMToolbar(); };
-  window.visualViewport.addEventListener('resize', onVV);
-  window.visualViewport.addEventListener('scroll', onVV);
-}
+// ВНИМАНИЕ: подписки на src/sym вынесены НИЖЕ — после `const sym = $('#sym')`,
+// иначе обращение к sym здесь падало бы в TDZ и рушило загрузку всего main.js.
 
 // --- events ---
 src.addEventListener('input', ()=>{ expandDateAtCursor(); persist(); paint(); });
@@ -1783,6 +1774,19 @@ sym.addEventListener('blur', ()=>{ clearTimeout(symTimer); symSync(); });
 sym.addEventListener('blur', ()=> setTimeout(()=>{ if(slashMode === 'sym') closeSlash(); }, 120));
 sym.addEventListener('compositionstart', ()=>{ symComposing = true; });
 sym.addEventListener('compositionend', ()=>{ symComposing = false; clearTimeout(symTimer); symSync(); });
+// Мобильная панель вставки: показ при фокусе редактора (src/sym), позиция над клавиатурой.
+// Здесь — уже ПОСЛЕ `const sym`, поэтому обращение к sym безопасно (без TDZ).
+[src, sym].forEach(el => {
+  el.addEventListener('focus', () => setEditing(true));
+  el.addEventListener('blur', () => setTimeout(() => {   // тап по кнопке панели фокус не снимает
+    if(document.activeElement !== src && document.activeElement !== sym) setEditing(false);
+  }, 150));
+});
+if(window.visualViewport){
+  const onVV = () => { if(document.body.classList.contains('editing')) placeMToolbar(); };
+  window.visualViewport.addEventListener('resize', onVV);
+  window.visualViewport.addEventListener('scroll', onVV);
+}
 // Вставка — только текст (без чужого HTML)
 sym.addEventListener('paste', e=>{
   e.preventDefault();
