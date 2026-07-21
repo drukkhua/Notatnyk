@@ -911,7 +911,7 @@ function expandDateAtCursor(){
 
 // --- генерация таблицы по размеру ---
 function openTableDlg(){ tableDlg.hidden = false; tblCols.focus(); tblCols.select(); }
-function closeTableDlg(){ tableDlg.hidden = true; src.focus(); }
+function closeTableDlg(){ tableDlg.hidden = true; symTableCtx = null; src.focus(); }
 function makeTable(cols, rows){
   const clamp = (v,lo,hi)=> Math.max(lo, Math.min(hi, v|0));
   cols = clamp(cols,1,12); rows = clamp(rows,1,50);
@@ -923,7 +923,9 @@ function makeTable(cols, rows){
 }
 function createTable(){
   const text = makeTable(+tblCols.value, +tblRows.value);
+  const symCtx = symTableCtx; symTableCtx = null;      // из slash-меню симбиоза (захват до закрытия)
   closeTableDlg();
+  if(symCtx){ symApplyInsert(symCtx, slashInsertSpec({ table:true }, text)); return; }
   insertBlock(text);
 }
 
@@ -1179,46 +1181,38 @@ function reflectFolder(){
 // ── Slash-меню «/»: быстрая вставка наших паттернов в «Исходнике» ────────────
 // Триггер: «/» в НАЧАЛЕ строки (после пробелов) → всплывает меню, фильтруется по
 // тексту после «/». ↑/↓ — навигация, Enter/Tab — вставить, Esc — закрыть. Так «/»
-// внутри строки (грн/шт, 18400/1200, https://) меню НЕ трогает. Переиспользует те же
-// примитивы вставки, что и тулбар (runInsert-цепочка). Пока только textarea #src;
-// симбиоз-режим — отдельная задача.
+// внутри строки (грн/шт, 18400/1200, https://) меню НЕ трогает. Работает в ОБЕИХ
+// панелях — «Исходник» (textarea) и «Симбиоз» (contenteditable); пункты — общие
+// декларативные спеки, вставка примитивами тулбара (src) либо построчно (sym).
 function slashItems(){
   const cur = LOCALE.currency, unit = LOCALE.unit, tot = LOCALE.total, ex = t('exVar');
-  const tok = (ins, sel) => () => insertToken(ins, sel);
-  const blk = (text, sel, caret) => () => insertBlock(text, sel, caret);
-  const pfx = (p, cls) => () => prefixLines(p, cls);
-  // порядок — как пишется смета: деньги первыми (это наша суть), потом структура
+  // Одна из вставок на пункт: ins (токен) | block | prefix+cls | table | hideBlock.
+  // sel — заполнитель (выделяется), caret — место каретки. Деньги первыми — это суть.
   return [
-    { label:`= 0 ${cur}`,               desc:t('sPrice'),   keys:`price cena цена сумма = : ${cur}`,  run:tok(`= 0 ${cur}`, '0') },
-    { label:`${tot}:`,                  desc:t('sTotal'),   keys:`total итого разом подытог`,          run:blk(`${tot}  ${cur}`, null, ` ${cur}`) },
-    { label:`[4000 ${unit}]`,           desc:t('sQtyUnit',{total:tot}), keys:`unit шт цена за единицу тираж`, run:tok(`[4000 ${unit}]`, '4000') },
-    { label:'2*3=',                     desc:t('sCalc'),    keys:`calc калькулятор формула math расчёт`, run:tok('2*3=', '2*3') },
-    { label:`[${ex}] =`,                desc:t('sVar'),     keys:`variable переменная var`,            run:blk(`[${ex}] = `, ex) },
-    { label:`[${LOCALE.depositVar}] = 30%`, desc:t('sDeposit',{total:tot}), keys:`deposit депозит аванс`,   run:blk(`[${LOCALE.depositVar}] = 30%`, '30') },
-    { label:`[${LOCALE.payVar}] =`,     desc:t('sPayVar'),  keys:`pay оплата ссылка url платёж`,       run:blk(`[${LOCALE.payVar}] = `) },
-    { label:`[${LOCALE.validVar}] =`,   desc:t('sValid'),   keys:`valid действительна срок дата`,      run:blk(`[${LOCALE.validVar}] = `) },
-    { label:`[${LOCALE.emailVar}] =`,   desc:t('sEmailVar'),keys:`email почта mail`,                   run:blk(`[${LOCALE.emailVar}] = `) },
-    { label:'##',                       desc:t('sHead'),    keys:`heading заголовок h1 h2 h3`,         run:pfx('## ', 'head') },
-    { label:'[ ]',                      desc:t('sCheck',{done:LOCALE.done}), keys:`check чекбокс todo задача`, run:pfx('[ ] ', 'list') },
-    { label:'-',                        desc:t('sList'),    keys:`list список маркер bullet`,          run:pfx('- ', 'list') },
-    { label:'1.',                       desc:t('sNum'),     keys:`number нумерация ordered`,           run:pfx('1. ', 'list') },
-    { label:'!',                        desc:t('sCallout'), keys:`callout выноска warning note важно`, run:pfx('! ', 'callout') },
-    { label:'| A | B |',                desc:t('sTable'),   keys:`table таблица`,                      run:()=>openTableDlg() },
-    { label:`> @${LOCALE.client}`,      desc:t('sQuote'),   keys:`quote цитата клиент client`,         run:pfx('> ', 'quote') },
-    { label:'//',                       desc:t('sHide'),    keys:`hide скрыть строка internal себестоимость`, run:pfx('// ', 'hide') },
-    { label:'/* */',                    desc:t('sHideBlock'),keys:`hide block скрытый блок`,           run:()=>wrapHiddenBlock() },
-    { label:'---',                      desc:t('sHrThin'),  keys:`hr разделитель линия divider`,       run:blk('---\n') },
-    { label:'[date]',                   desc:t('sDate',{date:dateStr(false)}), keys:`date дата`,       run:tok('[date]') },
+    { label:`= 0 ${cur}`,               desc:t('sPrice'),   keys:`price cena цена сумма = : ${cur}`,  ins:`= 0 ${cur}`, sel:'0' },
+    { label:`${tot}:`,                  desc:t('sTotal'),   keys:`total итого разом подытог`,          block:`${tot}  ${cur}`, caret:` ${cur}` },
+    { label:`[4000 ${unit}]`,           desc:t('sQtyUnit',{total:tot}), keys:`unit шт цена за единицу тираж`, ins:`[4000 ${unit}]`, sel:'4000' },
+    { label:'2*3=',                     desc:t('sCalc'),    keys:`calc калькулятор формула math расчёт`, ins:'2*3=', sel:'2*3' },
+    { label:`[${ex}] =`,                desc:t('sVar'),     keys:`variable переменная var`,            block:`[${ex}] = `, sel:ex },
+    { label:`[${LOCALE.depositVar}] = 30%`, desc:t('sDeposit',{total:tot}), keys:`deposit депозит аванс`, block:`[${LOCALE.depositVar}] = 30%`, sel:'30' },
+    { label:`[${LOCALE.payVar}] =`,     desc:t('sPayVar'),  keys:`pay оплата ссылка url платёж`,       block:`[${LOCALE.payVar}] = ` },
+    { label:`[${LOCALE.validVar}] =`,   desc:t('sValid'),   keys:`valid действительна срок дата`,      block:`[${LOCALE.validVar}] = ` },
+    { label:`[${LOCALE.emailVar}] =`,   desc:t('sEmailVar'),keys:`email почта mail`,                   block:`[${LOCALE.emailVar}] = ` },
+    { label:'##',                       desc:t('sHead'),    keys:`heading заголовок h1 h2 h3`,         prefix:'## ', cls:'head' },
+    { label:'[ ]',                      desc:t('sCheck',{done:LOCALE.done}), keys:`check чекбокс todo задача`, prefix:'[ ] ', cls:'list' },
+    { label:'-',                        desc:t('sList'),    keys:`list список маркер bullet`,          prefix:'- ', cls:'list' },
+    { label:'1.',                       desc:t('sNum'),     keys:`number нумерация ordered`,           prefix:'1. ', cls:'list' },
+    { label:'!',                        desc:t('sCallout'), keys:`callout выноска warning note важно`, prefix:'! ', cls:'callout' },
+    { label:'| A | B |',                desc:t('sTable'),   keys:`table таблица`,                      table:true },
+    { label:`> @${LOCALE.client}`,      desc:t('sQuote'),   keys:`quote цитата клиент client`,         prefix:'> ', cls:'quote' },
+    { label:'//',                       desc:t('sHide'),    keys:`hide скрыть строка internal себестоимость`, prefix:'// ', cls:'hide' },
+    { label:'/* */',                    desc:t('sHideBlock'),keys:`hide block скрытый блок`,           hideBlock:true },
+    { label:'---',                      desc:t('sHrThin'),  keys:`hr разделитель линия divider`,       block:'---\n' },
+    { label:'[date]',                   desc:t('sDate',{date:dateStr(false)}), keys:`date дата`,       ins:'[date]' },
   ];
 }
-let slashEl = null, slashList = [], slashIdx = 0, slashFrom = -1;
-function slashCtx(){                                 // {from, query} если курсор в контексте «/…», иначе null
-  if(src.selectionStart !== src.selectionEnd) return null;
-  const pos = src.selectionStart, val = src.value;
-  const ls = val.lastIndexOf('\n', pos - 1) + 1;
-  const m = val.slice(ls, pos).match(/^(\s*)\/([^\s/]*)$/);   // от начала строки: пробелы + «/» + запрос
-  return m ? { from: ls + m[1].length, query: m[2] } : null;
-}
+// ── общий UI меню (обе панели) ──────────────────────────────────────────────
+let slashEl = null, slashList = [], slashIdx = 0, slashMode = 'src', slashFrom = -1, symTableCtx = null;
 function ensureSlashEl(){
   if(slashEl) return;
   slashEl = document.createElement('div');
@@ -1226,19 +1220,13 @@ function ensureSlashEl(){
   slashEl.style.display = 'none';
   document.body.appendChild(slashEl);
 }
-function openSlash(query, from){
-  slashFrom = from;
-  const q = query.trim().toLowerCase();
-  const all = slashItems();
+function slashOpen(){ return slashEl && slashEl.style.display !== 'none'; }
+function closeSlash(){ if(slashEl) slashEl.style.display = 'none'; slashFrom = -1; }
+function filterSlash(query){
+  const q = query.trim().toLowerCase(), all = slashItems();
   slashList = q ? all.filter(it => (it.label + ' ' + it.desc + ' ' + it.keys).toLowerCase().includes(q)) : all;
   slashIdx = 0;
-  ensureSlashEl();
-  slashEl.style.display = 'block';
-  renderSlash();
-  positionSlash(from);
 }
-function closeSlash(){ if(slashEl) slashEl.style.display = 'none'; slashFrom = -1; }
-function slashOpen(){ return slashEl && slashEl.style.display !== 'none'; }
 function renderSlash(){
   if(!slashList.length){ slashEl.innerHTML = `<div class="slash-empty">${escapeHtml(t('slashEmpty'))}</div>`; return; }
   const box = document.createElement('div'); box.className = 'slash-list';
@@ -1247,7 +1235,7 @@ function renderSlash(){
     b.type = 'button';
     b.className = 'slash-item' + (i === slashIdx ? ' on' : '');
     b.innerHTML = `<span class="slash-key">${escapeHtml(it.label)}</span><span class="slash-desc">${escapeHtml(it.desc)}</span>`;
-    b.onmousedown = e => { e.preventDefault(); slashIdx = i; chooseSlash(); };
+    b.onmousedown = e => { e.preventDefault(); slashIdx = i; slashChoose(); };
     b.onmousemove = () => { if(slashIdx !== i){ slashIdx = i; paintSlashActive(); } };
     box.appendChild(b);
   });
@@ -1260,6 +1248,21 @@ function paintSlashActive(){                         // только перек�
   items.forEach((el, i) => el.classList.toggle('on', i === slashIdx));
   const on = items[slashIdx]; if(on) on.scrollIntoView({ block:'nearest' });
 }
+function moveSlash(d){
+  if(!slashList.length) return;
+  slashIdx = (slashIdx + d + slashList.length) % slashList.length;
+  paintSlashActive();
+}
+function slashChoose(){ slashMode === 'sym' ? chooseSlashSym() : chooseSlashSrc(); }
+
+// ── панель «Исходник» (textarea #src) ───────────────────────────────────────
+function slashCtx(){                                 // {from, query} или null
+  if(src.selectionStart !== src.selectionEnd) return null;
+  const pos = src.selectionStart, val = src.value;
+  const ls = val.lastIndexOf('\n', pos - 1) + 1;
+  const m = val.slice(ls, pos).match(/^(\s*)\/([^\s/]*)$/);   // от начала строки: пробелы + «/» + запрос
+  return m ? { from: ls + m[1].length, query: m[2] } : null;
+}
 function positionSlash(from){
   const cs = getComputedStyle(src);
   const lh = parseFloat(cs.lineHeight) || 20;
@@ -1267,19 +1270,27 @@ function positionSlash(from){
   const rect = src.getBoundingClientRect();
   let x = rect.left + (parseFloat(cs.paddingLeft) || 0) - src.scrollLeft + 2;
   let y = rect.top + (parseFloat(cs.paddingTop) || 0) + (lineIdx + 1) * lh - src.scrollTop + 4;
-  const mw = slashEl.offsetWidth || 280, mh = slashEl.offsetHeight || 260;
+  const mw = slashEl.offsetWidth || 288, mh = slashEl.offsetHeight || 260;
   x = Math.max(8, Math.min(x, window.innerWidth - mw - 8));
   if(y + mh > window.innerHeight - 8)               // не влезает вниз — показываем над строкой
     y = rect.top + (parseFloat(cs.paddingTop) || 0) + lineIdx * lh - src.scrollTop - mh - 4;
   slashEl.style.left = x + 'px';
   slashEl.style.top = Math.max(8, y) + 'px';
 }
-function moveSlash(d){
-  if(!slashList.length) return;
-  slashIdx = (slashIdx + d + slashList.length) % slashList.length;
-  paintSlashActive();
+function openSlash(query, from){
+  slashMode = 'src'; slashFrom = from;
+  filterSlash(query); ensureSlashEl(); slashEl.style.display = 'block';
+  renderSlash(); positionSlash(from);
 }
-function chooseSlash(){
+function updateSlash(){ const c = slashCtx(); c ? openSlash(c.query, c.from) : (slashMode === 'src' && closeSlash()); }
+function runSlashSrc(it){                             // вставка в textarea (та же диспетчеризация, что runInsert)
+  if(it.table)          openTableDlg();
+  else if(it.hideBlock) wrapHiddenBlock();
+  else if(it.prefix)    prefixLines(it.prefix, it.cls);
+  else if(it.block)     insertBlock(it.block, it.sel, it.caret);
+  else                  insertToken(it.ins, it.sel);
+}
+function chooseSlashSrc(){
   const it = slashList[slashIdx]; if(!it || slashFrom < 0) return;
   const pos = src.selectionStart;
   closeSlash();
@@ -1289,19 +1300,93 @@ function chooseSlash(){
     src.value = src.value.slice(0, slashFrom) + src.value.slice(pos);
     src.setSelectionRange(slashFrom, slashFrom);
   }
-  it.run();                                         // вставить паттерн на месте (логика тулбара)
+  runSlashSrc(it);
 }
-function updateSlash(){ const c = slashCtx(); c ? openSlash(c.query, c.from) : closeSlash(); }
+
+// ── панель «Симбиоз» (contenteditable #sym): построчная вставка в исходный текст ─
+function slashCtxSym(){                              // {line, wsLen, offset, query} или null
+  const c = symCaret(); if(!c) return null;
+  const cur = (symReadText().split('\n')[c.line]) ?? '';
+  const m = cur.slice(0, c.offset).match(/^(\s*)\/([^\s/]*)$/);
+  return m ? { line: c.line, wsLen: m[1].length, offset: c.offset, query: m[2] } : null;
+}
+function positionSlashSym(){
+  ensureSlashEl();
+  const s = window.getSelection();
+  let rect = s && s.rangeCount ? s.getRangeAt(0).getBoundingClientRect() : null;
+  if(!rect || (!rect.top && !rect.height)){         // каретка в начале строки даёт пустой rect — берём блок
+    const c = symCaret(), block = c && sym.children[c.line];
+    if(block) rect = block.getBoundingClientRect();
+  }
+  if(!rect) return;
+  const mw = slashEl.offsetWidth || 288, mh = slashEl.offsetHeight || 260;
+  const x = Math.max(8, Math.min(rect.left + 2, window.innerWidth - mw - 8));
+  let y = rect.bottom + 4;
+  if(y + mh > window.innerHeight - 8) y = rect.top - mh - 4;
+  slashEl.style.left = x + 'px';
+  slashEl.style.top = Math.max(8, y) + 'px';
+}
+function openSlashSym(query){
+  slashMode = 'sym';
+  filterSlash(query); ensureSlashEl(); slashEl.style.display = 'block';
+  renderSlash(); positionSlashSym();
+}
+function updateSlashSym(){ const c = slashCtxSym(); c ? openSlashSym(c.query) : (slashMode === 'sym' && closeSlash()); }
+// Выделить (a..b) или поставить каретку (a==b) в блоке симбиоза по символьным смещениям.
+function symSetSel(line, a, b){
+  const block = sym.children[line]; if(!block) return;
+  const nodeAt = off => {
+    const w = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let rem = off, n;
+    while((n = w.nextNode())){ const L = (n.nodeValue || '').length; if(rem <= L) return { n, o: rem }; rem -= L; }
+    return null;
+  };
+  const s = window.getSelection(); if(!s) return;
+  const A = nodeAt(a), B = nodeAt(b), r = document.createRange();
+  if(A) r.setStart(A.n, A.o); else r.selectNodeContents(block);
+  if(B) r.setEnd(B.n, B.o);   else r.collapse(false);
+  s.removeAllRanges(); s.addRange(r);
+}
+// Спека вставки: тело + позиция каретки {cl:строка от вставки, off:смещение, sel:длина выделения}.
+function slashInsertSpec(it, tableText){
+  if(it.prefix)    return { body: it.prefix, cl:0, off: it.prefix.length, sel:0 };
+  if(it.hideBlock) return { body: '/*\n\n*/', cl:1, off:0, sel:0 };     // каретка на пустой средней строке
+  if(it.table)     return { body: (tableText || '').replace(/\n+$/, ''), cl:0, off:0, sel:0 };
+  const body = (it.block != null ? it.block : it.ins || '').replace(/\n+$/, '');
+  const mark = it.sel || it.caret;
+  if(mark){ const k = body.lastIndexOf(mark); if(k >= 0) return { body, cl:0, off:k, sel: it.sel ? mark.length : 0 }; }
+  return { body, cl:0, off: body.length, sel:0 };
+}
+function symApplyInsert(ctx, spec){
+  const lines = symReadText().split('\n');
+  const cur = lines[ctx.line] ?? '';
+  const head = cur.slice(0, ctx.wsLen), tail = cur.slice(ctx.offset);   // отступ сохраняем, «/запрос» убираем
+  const parts = (head + spec.body + tail).split('\n');
+  lines.splice(ctx.line, 1, ...parts);
+  const text = lines.join('\n');
+  src.value = text; persist(); symPaint(text); paint();
+  const cLine = ctx.line + spec.cl;
+  const cOff = (spec.cl === 0 ? head.length : 0) + spec.off;
+  sym.focus();                                       // фокус ДО установки каретки (иначе выделение сбрасывается)
+  symSetSel(cLine, cOff, cOff + spec.sel);
+}
+function chooseSlashSym(){
+  const it = slashList[slashIdx]; if(!it){ closeSlash(); return; }
+  const ctx = slashCtxSym(); if(!ctx){ closeSlash(); return; }
+  closeSlash();
+  if(it.table){ symTableCtx = ctx; openTableDlg(); return; }   // размер спросим в диалоге (createTable)
+  symApplyInsert(ctx, slashInsertSpec(it));
+}
 
 // --- events ---
 src.addEventListener('input', ()=>{ expandDateAtCursor(); persist(); paint(); });
 // slash-меню «/»: детект по вводу; клавиши навигации; репозиция/закрытие
 src.addEventListener('input', updateSlash);
 src.addEventListener('keydown', e => {
-  if(!slashOpen()) return;
+  if(!(slashOpen() && slashMode === 'src')) return;
   if(e.key === 'ArrowDown'){ e.preventDefault(); moveSlash(1); }
   else if(e.key === 'ArrowUp'){ e.preventDefault(); moveSlash(-1); }
-  else if(e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); chooseSlash(); }
+  else if(e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); chooseSlashSrc(); }
   else if(e.key === 'Escape'){ e.preventDefault(); closeSlash(); }
 });
 src.addEventListener('blur', () => setTimeout(closeSlash, 120));
@@ -1439,6 +1524,7 @@ function symSync(){
   const caret = symComposing ? null : symCaret();
   paint();                                   // правый рендер + футер Σ — вживую
   if(!symComposing){ symPaint(text); symRestore(caret); }
+  if(slashOpen() && slashMode === 'sym') positionSlashSym();   // холст перерисован — репозиция меню
 }
 
 // синхроскролл: симбиоз ведёт → рендер следует (гейт activePane, без обратной петли)
@@ -1447,7 +1533,17 @@ sym.addEventListener('touchstart', ()=> activePane = 'sym', { passive:true });
 sym.addEventListener('focus', ()=> activePane = 'sym');
 sym.addEventListener('scroll', ()=>{ if(activePane === 'sym') scrollPaneToLine(out, topLineOf(sym)); });
 sym.addEventListener('input', ()=>{ clearTimeout(symTimer); symTimer = setTimeout(symSync, 250); });
+// slash-меню «/» в симбиозе: детект сразу по вводу; навигация клавишами; закрытие
+sym.addEventListener('input', updateSlashSym);
+sym.addEventListener('keydown', e => {
+  if(!(slashOpen() && slashMode === 'sym')) return;
+  if(e.key === 'ArrowDown'){ e.preventDefault(); moveSlash(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); moveSlash(-1); }
+  else if(e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); chooseSlashSym(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeSlash(); }
+});
 sym.addEventListener('blur', ()=>{ clearTimeout(symTimer); symSync(); });
+sym.addEventListener('blur', ()=> setTimeout(()=>{ if(slashMode === 'sym') closeSlash(); }, 120));
 sym.addEventListener('compositionstart', ()=>{ symComposing = true; });
 sym.addEventListener('compositionend', ()=>{ symComposing = false; clearTimeout(symTimer); symSync(); });
 // Вставка — только текст (без чужого HTML)
@@ -1477,6 +1573,7 @@ sym.addEventListener('mousedown', e=>{
 // экрана (симбиоз по умолчанию), см. css/responsive.css.
 let viewMode = 'source';                      // source | sym | view
 function setView(mode){
+  closeSlash();                                  // при смене панели slash-меню не тащим
   // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
   if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
   viewMode = mode;
