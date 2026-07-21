@@ -17,7 +17,7 @@
 <body>
   <div id="app">
     <aside class="sidebar">
-      <div class="side-head">
+      <div class="side-head" data-tauri-drag-region>
         <span class="logo"><span class="sigma">Σ</span> notatnyk</span>
         <button id="newBtn" data-i18n-title="newNote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -41,7 +41,7 @@
     </aside>
 
     <main class="workspace">
-      <header class="bar">
+      <header class="bar" data-tauri-drag-region>
         <div class="bar-left">
           <span id="docTitle" class="doc-title">—</span>
           <span id="counter" class="counter" hidden></span>
@@ -74,6 +74,13 @@
           <button id="delBtn" class="ghost" data-i18n-title="del">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
           </button>
+          <!-- Кнопки управления окном — только Windows/Linux (frameless). На macOS
+               остаются нативные «светофоры» (titleBarStyle: Overlay). JS ставит hidden=false. -->
+          <div id="winCtl" class="win-ctl" hidden>
+            <button id="winMin" class="win-btn" aria-label="Minimize"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.2"/></svg></button>
+            <button id="winMax" class="win-btn" aria-label="Maximize"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+            <button id="winClose" class="win-btn win-close" aria-label="Close"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2"/></svg></button>
+          </div>
         </div>
       </header>
 

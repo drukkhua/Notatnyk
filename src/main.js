@@ -1781,6 +1781,25 @@ function toggleTheme(){
 }
 $('#themeBtn').onclick = toggleTheme;
 
+// ── Frameless-титлбар ───────────────────────────────────────────────────────
+// Перетаскивание окна — через data-tauri-drag-region (шапка сайдбара + тулбар).
+// macOS: нативные «светофоры» (titleBarStyle: Overlay) — свои кнопки НЕ показываем.
+// Windows: окно без рамки (decorations:false) — рисуем min/max/close сами.
+(function initWindowChrome(){
+  const ua = navigator.userAgent || '';
+  const plat = /Mac/i.test(ua) ? 'mac' : /Win/i.test(ua) ? 'win' : 'other';
+  document.body.dataset.platform = plat;
+  if(plat !== 'win') return;                    // свои кнопки окна — только на Windows
+  const W = window.__TAURI__ && window.__TAURI__.window;
+  if(!W || !W.getCurrentWindow) return;
+  const win = W.getCurrentWindow();
+  const ctl = $('#winCtl'); if(ctl) ctl.hidden = false;
+  const on = (id, fn) => { const el = $('#' + id); if(el) el.onclick = fn; };
+  on('winMin',   () => win.minimize());
+  on('winMax',   () => win.toggleMaximize());
+  on('winClose', () => win.close());
+})();
+
 // --- seed sample ---
 async function seed(){
   const body = `# Nebula Серия, 20 видов по 1000 шт.

@@ -10,6 +10,9 @@
 }
 .side-head{display:flex;align-items:center;justify-content:space-between;
   padding:12px 14px;border-bottom:1px solid var(--line);}
+/* frameless-титлбар: на macOS (titleBarStyle Overlay) слева стоят нативные
+   «светофоры» — освобождаем под них место. Windows/Linux — без сдвига. */
+body[data-platform="mac"] .side-head{padding-left:78px;}
 .logo{font-weight:700;font-size:15px;letter-spacing:-.02em;}
 .sigma{color:var(--check);font-family:Georgia,serif;font-weight:700;}
 .search{margin:8px 10px 2px;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px;

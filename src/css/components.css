@@ -186,3 +186,13 @@
   color:var(--ink-soft);background:var(--paper-2);border:1px solid var(--line-2);
   border-radius:999px;padding:1px 8px;}
 .palette-empty{padding:22px;text-align:center;font-size:13px;color:var(--ink-soft);}
+
+/* ── Кнопки управления окном (frameless, Windows/Linux) ─────────────────────*/
+.win-ctl{display:flex;align-items:center;gap:2px;margin-left:6px;}
+.win-ctl[hidden]{display:none;}
+.win-btn{width:34px;height:26px;display:grid;place-items:center;border:0;
+  border-radius:var(--r-1);background:transparent;color:var(--ink-soft);cursor:pointer;
+  transition:background var(--dur),color var(--dur);}
+.win-btn:hover{background:var(--paper-2);color:var(--ink);}
+.win-btn svg{width:12px;height:12px;stroke:currentColor;}
+.win-close:hover{background:#e5484d;color:#fff;}
