@@ -22,7 +22,7 @@
 .note-item{padding:9px 10px;border-radius:10px;cursor:pointer;margin-bottom:2px;
   transition:background .12s;}
 .note-item:hover{background:var(--paper-2);}
-.note-item.active{background:var(--sum-bg);}
+.note-item.active{background:var(--sum-bg);box-shadow:inset 2px 0 0 var(--check);}
 .note-item .t{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .note-item .d{font-size:11px;color:var(--ink-soft);margin-top:2px;}
 

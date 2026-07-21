@@ -8,3 +8,11 @@ body{
   font-family:ui-sans-serif,"Segoe UI",system-ui,-apple-system,"Noto Sans",sans-serif;
   -webkit-font-smoothing:antialiased;overflow:hidden;
 }
+/* Тонкие скроллбары — единый вид во всех прокручиваемых зонах. Тумб с
+   прозрачной рамкой и background-clip выглядит тоньше и «дороже». */
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:999px;
+  border:3px solid transparent;background-clip:padding-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--src-num);background-clip:padding-box;}
+::-webkit-scrollbar-corner{background:transparent;}
