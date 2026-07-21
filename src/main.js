@@ -232,8 +232,11 @@ function select(id){
   src.value = n ? n.body : '';
   loadFolds();            // свёрнутость этой заметки (localStorage), до первого paint
   drawList();
+  // режим просмотра — запомненный для этой заметки, иначе дефолт (телефон — симбиоз)
+  const mode = loadView() || (window.matchMedia('(max-width:640px)').matches ? 'sym' : 'source');
+  applyView(mode);        // ставит панель БЕЗ коммита симбиоза: src.value уже = тело заметки
   paint();
-  if(typeof sym !== 'undefined' && !sym.hidden) symPaint(src.value);  // симбиоз-холст под новую заметку
+  if(mode === 'sym') symPaint(src.value);   // симбиоз-холст под новую заметку
 }
 
 // ── Компактный вид: дерево секций + свёрнутость (порт из BitrixUI) ───────────
@@ -254,6 +257,18 @@ function loadFolds(){
 function saveFolds(){
   const k = foldKey(); if(!k) return;
   try{ localStorage.setItem(k, JSON.stringify([...currentFolds])); foldsStored = true; }catch{}
+}
+// Режим просмотра (Исходник/Симбиоз/Рендер) — тоже per-note, в localStorage (не в .md).
+// Сохраняется только когда пользователь сам переключил панель; иначе заметка следует
+// дефолту по ширине экрана (телефон — симбиоз, десктоп — исходник).
+const viewKey = () => currentId ? `notatnyk.view.${currentId}` : null;
+function loadView(){
+  const k = viewKey(); if(!k) return null;
+  try{ const v = localStorage.getItem(k); return (v === 'source' || v === 'sym' || v === 'view') ? v : null; }catch{ return null; }
+}
+function saveView(){
+  const k = viewKey(); if(!k) return;
+  try{ localStorage.setItem(k, viewMode); }catch{}
 }
 // Дефолт при первом показе заметки: телефон — длинные секции свёрнуты; десктоп — всё открыто.
 function applyFoldDefaults(){
@@ -1652,14 +1667,21 @@ sym.addEventListener('mousedown', e=>{
 // рендер. Телефон (@media ≤640): показывается ТОЛЬКО одна панель, без разделения
 // экрана (симбиоз по умолчанию), см. css/responsive.css.
 let viewMode = 'source';                      // source | sym | view
-function setView(mode){
-  closeSlash();                                  // при смене панели slash-меню не тащим
-  // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
-  if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
+// Только применить панель (без сохранения и без коммита симбиоза) — общий низ
+// для setView и select() (при выборе заметки режим уже загружен, коммитить нечего).
+function applyView(mode){
   viewMode = mode;
   split.dataset.view = mode;                   // CSS решает, что видно
   const seg = { source:'segSplit', sym:'segSym', view:'segView' };
   for(const m in seg) $('#'+seg[m]).classList.toggle('active', m === mode);
+}
+// Пользователь переключил панель: коммитим правки симбиоза, применяем, ЗАПОМИНАЕМ per-note.
+function setView(mode){
+  closeSlash();                                  // при смене панели slash-меню не тащим
+  // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
+  if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
+  applyView(mode);
+  saveView();                                    // per-note память режима просмотра
   if(mode === 'sym'){ symPaint(src.value); sym.focus(); }
   paint();
 }
@@ -1731,9 +1753,7 @@ async function seed(){
     applyLang(lang, kwOverrides);     // язык интерфейса + движок + тулбар/шпаргалка
     try{ if(localStorage.getItem(DOCMODE_KEY) === '1') applyDocMode(true); }catch{}
     await loadAll();
-    select(currentId);
-    // Телефон: по умолчанию симбиоз (одна поверхность, без разделения экрана).
-    setView(window.matchMedia('(max-width:640px)').matches ? 'sym' : 'source');
+    select(currentId);   // применяет per-note режим просмотра (или дефолт по ширине экрана)
   }catch(e){
     out.innerHTML = `<div class="r-callout">⚠️ ${t('initError')}: ${e}</div>`;
   }
