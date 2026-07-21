@@ -1176,8 +1176,137 @@ function reflectFolder(){
   $('#folderBtn').title = loc.custom ? loc.dir : t('folderDefault');
 }
 
+// ── Slash-меню «/»: быстрая вставка наших паттернов в «Исходнике» ────────────
+// Триггер: «/» в НАЧАЛЕ строки (после пробелов) → всплывает меню, фильтруется по
+// тексту после «/». ↑/↓ — навигация, Enter/Tab — вставить, Esc — закрыть. Так «/»
+// внутри строки (грн/шт, 18400/1200, https://) меню НЕ трогает. Переиспользует те же
+// примитивы вставки, что и тулбар (runInsert-цепочка). Пока только textarea #src;
+// симбиоз-режим — отдельная задача.
+function slashItems(){
+  const cur = LOCALE.currency, unit = LOCALE.unit, tot = LOCALE.total, ex = t('exVar');
+  const tok = (ins, sel) => () => insertToken(ins, sel);
+  const blk = (text, sel, caret) => () => insertBlock(text, sel, caret);
+  const pfx = (p, cls) => () => prefixLines(p, cls);
+  // порядок — как пишется смета: деньги первыми (это наша суть), потом структура
+  return [
+    { label:`= 0 ${cur}`,               desc:t('sPrice'),   keys:`price cena цена сумма = : ${cur}`,  run:tok(`= 0 ${cur}`, '0') },
+    { label:`${tot}:`,                  desc:t('sTotal'),   keys:`total итого разом подытог`,          run:blk(`${tot}  ${cur}`, null, ` ${cur}`) },
+    { label:`[4000 ${unit}]`,           desc:t('sQtyUnit',{total:tot}), keys:`unit шт цена за единицу тираж`, run:tok(`[4000 ${unit}]`, '4000') },
+    { label:'2*3=',                     desc:t('sCalc'),    keys:`calc калькулятор формула math расчёт`, run:tok('2*3=', '2*3') },
+    { label:`[${ex}] =`,                desc:t('sVar'),     keys:`variable переменная var`,            run:blk(`[${ex}] = `, ex) },
+    { label:`[${LOCALE.depositVar}] = 30%`, desc:t('sDeposit',{total:tot}), keys:`deposit депозит аванс`,   run:blk(`[${LOCALE.depositVar}] = 30%`, '30') },
+    { label:`[${LOCALE.payVar}] =`,     desc:t('sPayVar'),  keys:`pay оплата ссылка url платёж`,       run:blk(`[${LOCALE.payVar}] = `) },
+    { label:`[${LOCALE.validVar}] =`,   desc:t('sValid'),   keys:`valid действительна срок дата`,      run:blk(`[${LOCALE.validVar}] = `) },
+    { label:`[${LOCALE.emailVar}] =`,   desc:t('sEmailVar'),keys:`email почта mail`,                   run:blk(`[${LOCALE.emailVar}] = `) },
+    { label:'##',                       desc:t('sHead'),    keys:`heading заголовок h1 h2 h3`,         run:pfx('## ', 'head') },
+    { label:'[ ]',                      desc:t('sCheck',{done:LOCALE.done}), keys:`check чекбокс todo задача`, run:pfx('[ ] ', 'list') },
+    { label:'-',                        desc:t('sList'),    keys:`list список маркер bullet`,          run:pfx('- ', 'list') },
+    { label:'1.',                       desc:t('sNum'),     keys:`number нумерация ordered`,           run:pfx('1. ', 'list') },
+    { label:'!',                        desc:t('sCallout'), keys:`callout выноска warning note важно`, run:pfx('! ', 'callout') },
+    { label:'| A | B |',                desc:t('sTable'),   keys:`table таблица`,                      run:()=>openTableDlg() },
+    { label:`> @${LOCALE.client}`,      desc:t('sQuote'),   keys:`quote цитата клиент client`,         run:pfx('> ', 'quote') },
+    { label:'//',                       desc:t('sHide'),    keys:`hide скрыть строка internal себестоимость`, run:pfx('// ', 'hide') },
+    { label:'/* */',                    desc:t('sHideBlock'),keys:`hide block скрытый блок`,           run:()=>wrapHiddenBlock() },
+    { label:'---',                      desc:t('sHrThin'),  keys:`hr разделитель линия divider`,       run:blk('---\n') },
+    { label:'[date]',                   desc:t('sDate',{date:dateStr(false)}), keys:`date дата`,       run:tok('[date]') },
+  ];
+}
+let slashEl = null, slashList = [], slashIdx = 0, slashFrom = -1;
+function slashCtx(){                                 // {from, query} если курсор в контексте «/…», иначе null
+  if(src.selectionStart !== src.selectionEnd) return null;
+  const pos = src.selectionStart, val = src.value;
+  const ls = val.lastIndexOf('\n', pos - 1) + 1;
+  const m = val.slice(ls, pos).match(/^(\s*)\/([^\s/]*)$/);   // от начала строки: пробелы + «/» + запрос
+  return m ? { from: ls + m[1].length, query: m[2] } : null;
+}
+function ensureSlashEl(){
+  if(slashEl) return;
+  slashEl = document.createElement('div');
+  slashEl.className = 'slash-menu';
+  slashEl.style.display = 'none';
+  document.body.appendChild(slashEl);
+}
+function openSlash(query, from){
+  slashFrom = from;
+  const q = query.trim().toLowerCase();
+  const all = slashItems();
+  slashList = q ? all.filter(it => (it.label + ' ' + it.desc + ' ' + it.keys).toLowerCase().includes(q)) : all;
+  slashIdx = 0;
+  ensureSlashEl();
+  slashEl.style.display = 'block';
+  renderSlash();
+  positionSlash(from);
+}
+function closeSlash(){ if(slashEl) slashEl.style.display = 'none'; slashFrom = -1; }
+function slashOpen(){ return slashEl && slashEl.style.display !== 'none'; }
+function renderSlash(){
+  if(!slashList.length){ slashEl.innerHTML = `<div class="slash-empty">${escapeHtml(t('slashEmpty'))}</div>`; return; }
+  const box = document.createElement('div'); box.className = 'slash-list';
+  slashList.forEach((it, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'slash-item' + (i === slashIdx ? ' on' : '');
+    b.innerHTML = `<span class="slash-key">${escapeHtml(it.label)}</span><span class="slash-desc">${escapeHtml(it.desc)}</span>`;
+    b.onmousedown = e => { e.preventDefault(); slashIdx = i; chooseSlash(); };
+    b.onmousemove = () => { if(slashIdx !== i){ slashIdx = i; paintSlashActive(); } };
+    box.appendChild(b);
+  });
+  slashEl.innerHTML = '';
+  slashEl.appendChild(box);
+  const on = box.children[slashIdx]; if(on) on.scrollIntoView({ block:'nearest' });
+}
+function paintSlashActive(){                         // только переключить подсветку, без пересборки
+  const items = slashEl.querySelectorAll('.slash-item');
+  items.forEach((el, i) => el.classList.toggle('on', i === slashIdx));
+  const on = items[slashIdx]; if(on) on.scrollIntoView({ block:'nearest' });
+}
+function positionSlash(from){
+  const cs = getComputedStyle(src);
+  const lh = parseFloat(cs.lineHeight) || 20;
+  const lineIdx = src.value.slice(0, from).split('\n').length - 1;
+  const rect = src.getBoundingClientRect();
+  let x = rect.left + (parseFloat(cs.paddingLeft) || 0) - src.scrollLeft + 2;
+  let y = rect.top + (parseFloat(cs.paddingTop) || 0) + (lineIdx + 1) * lh - src.scrollTop + 4;
+  const mw = slashEl.offsetWidth || 280, mh = slashEl.offsetHeight || 260;
+  x = Math.max(8, Math.min(x, window.innerWidth - mw - 8));
+  if(y + mh > window.innerHeight - 8)               // не влезает вниз — показываем над строкой
+    y = rect.top + (parseFloat(cs.paddingTop) || 0) + lineIdx * lh - src.scrollTop - mh - 4;
+  slashEl.style.left = x + 'px';
+  slashEl.style.top = Math.max(8, y) + 'px';
+}
+function moveSlash(d){
+  if(!slashList.length) return;
+  slashIdx = (slashIdx + d + slashList.length) % slashList.length;
+  paintSlashActive();
+}
+function chooseSlash(){
+  const it = slashList[slashIdx]; if(!it || slashFrom < 0) return;
+  const pos = src.selectionStart;
+  closeSlash();
+  src.focus();
+  src.setSelectionRange(slashFrom, pos);            // выделить «/запрос»
+  if(!document.execCommand || !document.execCommand('delete')){   // удалить (с отменой)
+    src.value = src.value.slice(0, slashFrom) + src.value.slice(pos);
+    src.setSelectionRange(slashFrom, slashFrom);
+  }
+  it.run();                                         // вставить паттерн на месте (логика тулбара)
+}
+function updateSlash(){ const c = slashCtx(); c ? openSlash(c.query, c.from) : closeSlash(); }
+
 // --- events ---
 src.addEventListener('input', ()=>{ expandDateAtCursor(); persist(); paint(); });
+// slash-меню «/»: детект по вводу; клавиши навигации; репозиция/закрытие
+src.addEventListener('input', updateSlash);
+src.addEventListener('keydown', e => {
+  if(!slashOpen()) return;
+  if(e.key === 'ArrowDown'){ e.preventDefault(); moveSlash(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); moveSlash(-1); }
+  else if(e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); chooseSlash(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); closeSlash(); }
+});
+src.addEventListener('blur', () => setTimeout(closeSlash, 120));
+src.addEventListener('scroll', () => { if(slashOpen()) positionSlash(slashFrom); });
+['click','keyup'].forEach(ev => src.addEventListener(ev, () => { if(slashOpen() && !slashCtx()) closeSlash(); }));
 // Подсветка активных кнопок тулбара следует за курсором
 ['keyup','click','focus'].forEach(ev => src.addEventListener(ev, updateToolbarState));
 document.addEventListener('selectionchange', () => { if(document.activeElement === src) updateToolbarState(); });

@@ -125,3 +125,22 @@
 .font-size-row{display:flex;align-items:center;justify-content:space-between;
   font-size:13px;color:var(--ink-soft);margin-top:4px;}
 .font-size-row .seg-btn{min-width:40px;}
+
+/* ── Slash-меню «/» (быстрая вставка паттернов) ─────────────────────────────
+   Плавающая панель у каретки: чип-синтаксис (моно, как чипы Σ) + описание. */
+.slash-menu{position:fixed;z-index:40;width:288px;max-height:266px;overflow:auto;
+  padding:4px;background:var(--paper);border:1px solid var(--line-2);
+  border-radius:var(--r-3);box-shadow:var(--sh-2),var(--ring);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+.slash-list{display:flex;flex-direction:column;gap:1px;}
+.slash-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:6px 8px;border:0;border-radius:var(--r-2);background:none;color:var(--ink);
+  cursor:pointer;font-family:inherit;transition:background var(--dur);}
+.slash-item.on{background:color-mix(in srgb,var(--check) 10%,var(--paper-2));}
+.slash-key{flex:none;min-width:92px;max-width:130px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:12px;font-weight:700;color:var(--sum-tx);background:var(--sum-bg);
+  border:1px solid var(--sum-line);border-radius:var(--r-1);padding:2px 7px;}
+.slash-desc{flex:1;min-width:0;font-size:12px;color:var(--ink-soft);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.slash-empty{padding:16px;text-align:center;font-size:12px;color:var(--ink-soft);}
