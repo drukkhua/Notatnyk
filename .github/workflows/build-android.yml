@@ -1,6 +1,6 @@
-# Сборка Android APK. По умолчанию — debug-вариант: он подписан отладочным ключом
-# и УСТАНАВЛИВАЕТСЯ напрямую (sideload) без каких-либо секретов. Готовый APK лежит
-# в Artifacts прогона. Как выпускать подписанный release-APK — см. README (нужен keystore).
+# Сборка Android APK: Android 16 (API 36), ТОЛЬКО arm64 (маленький размер),
+# RELEASE (не debug), подписанный. Без секретов подписывается эфемерным ключом —
+# APK устанавливается, но для обновляемых сборок задай keystore-секреты (см. README).
 name: build-android
 
 on:
@@ -36,15 +36,15 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
+      - name: Install SDK 36 (Android 16) + build-tools + NDK
         run: |
-          sdkmanager "ndk;27.1.12297006"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006"
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
 
-      - name: Rust (+ Android targets)
+      - name: Rust (+ arm64 Android target only)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android          # только arm64 → компактный APK
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -58,12 +58,52 @@ jobs:
       - name: Init Android project
         run: npx tauri android init --ci
 
-      - name: Build APK (debug — sideload-ready)
-        run: npx tauri android build --apk --debug
+      # minSdk 36 задан в tauri.conf (bundle.android). compileSdk/targetSdk = 36 —
+      # правим в сгенерированном gradle (иначе minSdk 36 > compileSdk даст ошибку).
+      - name: Target Android 16 (compileSdk/targetSdk 36)
+        run: |
+          G=src-tauri/gen/android/app/build.gradle.kts
+          sed -i -E 's/compileSdk *= *[0-9]+/compileSdk = 36/' "$G" || true
+          sed -i -E 's/targetSdk *= *[0-9]+/targetSdk = 36/' "$G" || true
+          echo "--- sdk lines ---"; grep -nE 'compileSdk|targetSdk|minSdk' "$G" || true
 
-      - name: Upload APK
+      - name: Build RELEASE APK (arm64 only, not debug)
+        run: npx tauri android build --apk --target aarch64
+
+      - name: Sign release APK
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          KS="$RUNNER_TEMP/notatnyk.jks"
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$KS"                 # свой keystore из секретов
+          else
+            KS_PASS=notatnyk; KEY_ALIAS=notatnyk; KEY_PASS=notatnyk
+            keytool -genkeypair -v -keystore "$KS" -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+              -dname "CN=Notatnyk, O=Notatnyk, C=UA"
+            echo "::warning title=APK signing::Подписано ЭФЕМЕРНЫМ ключом (без секретов). Устанавливается, но для обновлений задай ANDROID_KEYSTORE_BASE64/PASSWORD, ANDROID_KEY_ALIAS/PASSWORD."
+          fi
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          UNSIGNED=$(find src-tauri/gen/android -name '*-release-unsigned.apk' | head -1)
+          [ -z "$UNSIGNED" ] && UNSIGNED=$(find src-tauri/gen/android -name '*-release.apk' | head -1)
+          echo "Unsigned APK: $UNSIGNED"
+          OUT="$RUNNER_TEMP/notatnyk-android16-arm64.apk"
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" "$OUT"
+          "$BT/apksigner" sign --ks "$KS" --ks-pass "pass:$KS_PASS" \
+            --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASS" "$OUT"
+          "$BT/apksigner" verify --print-certs "$OUT" | head -3
+          ls -lh "$OUT"
+          echo "APK_OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: notatnyk-android-apk
+          name: notatnyk-android16-arm64-release
           if-no-files-found: error
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: ${{ env.APK_OUT }}

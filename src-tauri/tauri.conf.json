@@ -45,6 +45,9 @@
       "../notes-testing/kuhnya-na-zakaz.md": "demo/",
       "../notes-testing/natyazhnye-potolki.md": "demo/",
       "../notes-testing/remont-kvartiry.md": "demo/"
+    },
+    "android": {
+      "minSdkVersion": 36
     }
   }
 }
