@@ -223,6 +223,8 @@ function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   const dr = radiusRaw ? Math.min(Math.round(parseFloat(radiusRaw.replace(',','.'))*sc), Math.floor(Math.min(rw,rh)/2)) : 0;
   // Outer rect corner: slightly larger radius so both curves feel concentric
   const drOut = dr>0 ? Math.min(dr+db, Math.floor(Math.min(rw+2*db,rh+2*db)/2)) : 0;
+  // fold — биговка: пунктирная линия посередине перпендикулярно длинной стороне
+  const hasFold = /\bfold\b/i.test(modsStr);
 
   // Layout — inner rect inset by db; dim lines attach to inner rect edges.
   // When db=0 everything collapses to the plain case.
@@ -266,6 +268,13 @@ function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   // Diagonal X cross
   o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
   o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+  // Биговка (fold): пунктир «цепочка» 8-3-2-3, стандарт для линий сгиба.
+  // Перпендикулярна длинной стороне: вертикаль для пейзажа/квадрата, горизонталь для портрета.
+  if(hasFold){
+    const fl='stroke="'+dim+'" stroke-width="0.9" stroke-dasharray="8,3,2,3"';
+    if(rh>rw) o += '<line x1="'+rx+'" y1="'+cy+'" x2="'+(rx+rw)+'" y2="'+cy+'" '+fl+'/>';
+    else      o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+fl+'/>';
+  }
 
   // Width dim line: extension lines from inner rect bottom corners downward
   o += '<line x1="'+rx+'" y1="'+(ry+rh)+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>';
