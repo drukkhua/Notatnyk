@@ -506,6 +506,16 @@ function stripInline(s){
 // blocks[] — по одному на верхнеуровневый узел, с метаданными (sum/done/checks/rows/
 // declared/level/title) для компактного вида: groupBlocks() строит дерево секций и
 // сворачивает их БЕЗ повторного парсинга (порт из рабочего референса BitrixUI).
+
+// Эскиз ВНУТРИ текста (не единственный элемент) — абзац нужно изолировать через BFC,
+// чтобы float не вытекал в соседние блоки. Standalone-эскиз (весь абзац — только SVG)
+// не изолируем: его float пробивается в следующий абзац, давая газетное обтекание.
+function hasDimboxWithText(html){
+  if(!html.includes('r-dimbox')) return false;
+  const rest = html.replace(/<svg[\s\S]*?<\/svg>/g,'').replace(/<[^>]+>/g,'').trim();
+  return rest.length > 0;
+}
+
 export function render(text, opts){
   const lines = text.split('\n');
   EXPORT = !!(opts && opts.mode === 'export');
@@ -726,15 +736,19 @@ export function render(text, opts){
     }
     if(m = t.match(/^(\d+)\.\s+(.*)$/)){
       const r = inline(m[2]); add(r.sum);
-      emit(`<div class="r-num">${m[1]}. ${r.html}</div>`, 'num', { sum: r.sum }); continue;
+      const nc = hasDimboxWithText(r.html) ? 'r-num r-num-hd' : 'r-num';
+      emit(`<div class="${nc}">${m[1]}. ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
     if(m = t.match(/^[-*]\s+(.*)$/)){
       const r = inline(m[1]); add(r.sum);
-      emit(`<div class="r-li">${r.html}</div>`, 'li', { sum: r.sum }); continue;
+      const lc = hasDimboxWithText(r.html) ? 'r-li r-li-hd' : 'r-li';
+      emit(`<div class="${lc}">${r.html}</div>`, 'li', { sum: r.sum }); continue;
     }
     const r = inline(t); add(r.sum);
+    const ph = perUnitExpand(r.html, lastTotal);
     // обычный текст — без маркера списка; [кільк.] раскрывается по ближайшему «Итого»
-    emit(`<div class="r-p">${perUnitExpand(r.html, lastTotal)}</div>`, 'text', { sum: r.sum });
+    const pc = hasDimboxWithText(ph) ? 'r-p r-p-hd' : 'r-p';
+    emit(`<div class="${pc}">${ph}</div>`, 'text', { sum: r.sum });
   }
 
   // «/*» без пары спрятал бы весь хвост заметки молча — говорим об этом вслух.
