@@ -197,9 +197,9 @@ export function calc(input){
 // экспорте; inlineSource не трогает паттерн (инвариант И1). Вырезается ДО
 // varRef и perUnitExpand — защита от ложной трактовки «57» как qty.
 // ─────────────────────────────────────────────────────────────────────────────
-const RE_DIMBOX = /\[(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))\]/g;
+const RE_DIMBOX = /\[(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))((?:[+\s][^\]]*)?)\]/g;
 
-function buildDimSVG(wRaw, hRaw, unitRaw) {
+function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   const wn = parseFloat(String(wRaw).replace(',','.'));
   const hn = parseFloat(String(hRaw).replace(',','.'));
   if(!isFinite(wn)||!isFinite(hn)||wn<=0||hn<=0)
@@ -215,56 +215,80 @@ function buildDimSVG(wRaw, hRaw, unitRaw) {
   const rw = Math.round(Math.max(MIN_D, Math.min(MW, wn*sc)));
   const rh = Math.round(Math.max(MIN_D, Math.min(MH, hn*sc)));
 
-  // Layout: dim line BELOW rect (width) and to the RIGHT (height).
+  // Parse modifiers from source: +N = bleed, rN / r=N = corner radius
+  const modsStr = String(mods||'');
+  const bleedRaw  = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
+  const radiusRaw = (modsStr.match(/\br=?(\d+(?:[.,]\d+)?)/i)||[])[1];
+  const db = bleedRaw  ? Math.max(2, Math.round(parseFloat(bleedRaw.replace(',','.'))*sc))  : 0;
+  const dr = radiusRaw ? Math.min(Math.round(parseFloat(radiusRaw.replace(',','.'))*sc), Math.floor(Math.min(rw,rh)/2)) : 0;
+  // Outer rect corner: slightly larger radius so both curves feel concentric
+  const drOut = dr>0 ? Math.min(dr+db, Math.floor(Math.min(rw+2*db,rh+2*db)/2)) : 0;
+
+  // Layout — inner rect inset by db; dim lines attach to inner rect edges.
+  // When db=0 everything collapses to the plain case.
   const PL=8, PT=8, DG=8, PR=14, AL=6, AW=2.5;
-  const rx=PL, ry=PT;
-  const dim_y = ry+rh+DG;      // width dim line — below rect bottom
-  const dlx   = rx+rw+DG;      // height dim line — right of rect
-  const TH = PT+rh+DG+16+6;    // +16 label height, +6 bottom margin
-  const TW = PL+rw+DG+PR;
+  const rx=PL+db, ry=PT+db;             // inner rect origin
   const cx=rx+rw/2, cy=ry+rh/2;
+  const dim_y = PT+rh+2*db+DG;          // width dim line — below outer rect
+  const dlx   = PL+rw+2*db+DG;          // height dim line — right of outer rect
+  const TW=PL+rw+2*db+DG+PR;
+  const TH=PT+rh+2*db+DG+16+6;
 
   const wGap = Math.max(4, Math.min(rw/2-AL-6, (wText.length*6.8+6)/2));
   const hGap = Math.max(4, Math.min(rh/2-AL-6, (hText.length*6.8+6)/2));
 
   const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
   const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
-  const xt='stroke="'+di+'" stroke-width="0.7" stroke-dasharray="4,3"';
-  const el='stroke="'+dim+'" stroke-width="0.6"';
-  const dl='stroke="'+dim+'" stroke-width="0.8"';
-  const aw='stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
+  const xt  = 'stroke="'+di+'" stroke-width="0.7" stroke-dasharray="4,3"';
+  const el  = 'stroke="'+dim+'" stroke-width="0.6"';
+  const dl  = 'stroke="'+dim+'" stroke-width="0.8"';
+  const aw  = 'stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
+  // Bleed rect: same dash pattern as X-cross, slightly lighter
+  const bst = 'stroke="'+di+'" fill="none" stroke-width="0.75" stroke-dasharray="5,3"';
 
   const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW);
   const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW);
   const awU=(x,y)=>'M '+(x-AW)+','+(y+AL)+' L '+x+','+y+' L '+(x+AW)+','+(y+AL);
   const awD=(x,y)=>'M '+(x-AW)+','+(y-AL)+' L '+x+','+y+' L '+(x+AW)+','+(y-AL);
 
-  return '<svg class="r-dimbox" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
-       + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(wText)+' × '+esc(hText)+'">'
-       + '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>'
-       + '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>'
-       + '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>'
-       // Width: extension lines from BOTTOM corners down to dim_y
-       + '<line x1="'+rx+'" y1="'+(ry+rh)+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>'
-       + '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+el+'/>'
-       + '<line x1="'+rx+'" y1="'+dim_y+'" x2="'+(cx-wGap)+'" y2="'+dim_y+'" '+dl+'/>'
-       + '<line x1="'+(cx+wGap)+'" y1="'+dim_y+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+dl+'/>'
-       + '<path d="'+awL(rx,dim_y)+'" '+aw+'/>'
-       + '<path d="'+awR(rx+rw,dim_y)+'" '+aw+'/>'
-       + '<text x="'+cx+'" y="'+dim_y+'" text-anchor="middle" dominant-baseline="central" '
-       + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(wText)+'</text>'
-       // Height: extension lines from right corners rightward to dlx
-       + '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+dlx+'" y2="'+ry+'" '+el+'/>'
-       + '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+el+'/>'
-       + '<line x1="'+dlx+'" y1="'+ry+'" x2="'+dlx+'" y2="'+(cy-hGap)+'" '+dl+'/>'
-       + '<line x1="'+dlx+'" y1="'+(cy+hGap)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+dl+'/>'
-       + '<path d="'+awU(dlx,ry)+'" '+aw+'/>'
-       + '<path d="'+awD(dlx,ry+rh)+'" '+aw+'/>'
-       + '<text x="'+dlx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="central" '
-       + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'" '
-       + 'transform="rotate(-90 '+dlx+' '+cy+')">'+esc(hText)+'</text>'
-       + '</svg>';
+  let o = '<svg class="r-dimbox" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
+        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(wText)+' × '+esc(hText)+'">';
+
+  // Bleed outer rect (drawn first — behind inner rect)
+  if(db>0)
+    o += '<rect x="'+PL+'" y="'+PT+'" width="'+(rw+2*db)+'" height="'+(rh+2*db)+'" '
+       + bst+' rx="'+drOut+'" ry="'+drOut+'"/>';
+
+  // Inner rect (trim/product size)
+  o += '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st
+     + '" fill="var(--paper)" stroke-width="1.5" rx="'+dr+'" ry="'+dr+'"/>';
+
+  // Diagonal X cross
+  o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
+  o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+
+  // Width dim line: extension lines from inner rect bottom corners downward
+  o += '<line x1="'+rx+'" y1="'+(ry+rh)+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>';
+  o += '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+el+'/>';
+  o += '<line x1="'+rx+'" y1="'+dim_y+'" x2="'+(cx-wGap)+'" y2="'+dim_y+'" '+dl+'/>';
+  o += '<line x1="'+(cx+wGap)+'" y1="'+dim_y+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+dl+'/>';
+  o += '<path d="'+awL(rx,dim_y)+'" '+aw+'/><path d="'+awR(rx+rw,dim_y)+'" '+aw+'/>';
+  o += '<text x="'+cx+'" y="'+dim_y+'" text-anchor="middle" dominant-baseline="central" '
+     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(wText)+'</text>';
+
+  // Height dim line: extension lines from inner rect right corners rightward
+  o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+dlx+'" y2="'+ry+'" '+el+'/>';
+  o += '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+el+'/>';
+  o += '<line x1="'+dlx+'" y1="'+ry+'" x2="'+dlx+'" y2="'+(cy-hGap)+'" '+dl+'/>';
+  o += '<line x1="'+dlx+'" y1="'+(cy+hGap)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+dl+'/>';
+  o += '<path d="'+awU(dlx,ry)+'" '+aw+'/><path d="'+awD(dlx,ry+rh)+'" '+aw+'/>';
+  o += '<text x="'+dlx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="central" '
+     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'" '
+     + 'transform="rotate(-90 '+dlx+' '+cy+')">'+esc(hText)+'</text>';
+
+  return o+'</svg>';
 }
+
 
 
 
@@ -399,7 +423,7 @@ export function inline(text){
   // было бы принято как qty и делило бы ближайшее «Итого» на 57.
   const dimBoxes = [];
   RE_DIMBOX.lastIndex = 0;
-  s = s.replace(RE_DIMBOX, (m, w, h, u) => `${dimBoxes.push({kind:'rect', w, h, u}) - 1}`);
+  s = s.replace(RE_DIMBOX, (m, w, h, u, mods) => `${dimBoxes.push({kind:'rect', w, h, u, mods: mods||''}) - 1}`);
   RE_DIMCIRCLE.lastIndex = 0;
   s = s.replace(RE_DIMCIRCLE, (m, d, u) => `${dimBoxes.push({kind:'circle', d, u}) - 1}`);
 
@@ -467,7 +491,7 @@ export function inline(text){
     const box = dimBoxes[+i];
     return box.kind === 'circle'
       ? buildDimCircleSVG(box.d, box.u)
-      : buildDimSVG(box.w, box.h, box.u);
+      : buildDimSVG(box.w, box.h, box.u, box.mods || '');
   });
 
   // Возврат инлайн-кода: моноширинный чип в рамке (стили — .rendered code).

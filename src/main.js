@@ -782,7 +782,7 @@ function buildSyntax(){
     { ico:'table',   table:true,    w:'| A | B |',    g:t('sTable') },
     { ico:'callout', line:'! ',  cls:'callout', on:/^!{1,2}\s/, w:'! / !!',    g:t('sCallout'),
       menu:[['!','! '],['!!','!! ']] },
-    { ico:'dimBox',  ins:'[50x90мм]', sel:'50x90', w:'[50x90мм]',  g:t('sDimBox') },
+    { ico:'dimBox',  ins:'[50x90мм]', sel:'50x90', w:'[50x90мм]  [50x90мм r5]  [50x90мм+3]',  g:t('sDimBox') },
     { ico:'dimCirc', ins:'[d50мм]',  sel:'50',    w:'[d50мм]',    g:t('sDimCirc') },
     { ico:'hrThin',  block:'---\n', w:'---',          g:t('sHrThin'),
       menu:[['—','---\n'],['≡','===\n']] },
