@@ -304,9 +304,9 @@ function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
 // Круговой эскиз [d50мм]: окружность с крестом центровых линий и размерной
 // стрелкой диаметра (ø). Разделитель: буква d/D (diameter). Те же правила безопасности,
 // что и buildDimSVG: вырезается до varRef/perUnitExpand.
-const RE_DIMCIRCLE = /\[[dD](\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))\]/g;
+const RE_DIMCIRCLE = /\[[dD](\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))((?:[+\s][^\]]*)?)\]/g;
 
-function buildDimCircleSVG(dRaw, unitRaw) {
+function buildDimCircleSVG(dRaw, unitRaw, mods) {
   const dn = parseFloat(String(dRaw).replace(',','.'));
   if(!isFinite(dn)||dn<=0) return esc('[d'+dRaw+unitRaw+']');
   const uMap={'mm':'мм','мм':'мм','cm':'см','см':'см','dm':'дм','дм':'дм','m':'м','м':'м'};
@@ -318,43 +318,62 @@ function buildDimCircleSVG(dRaw, unitRaw) {
   const sc = Math.min(MAX_R*2/dn, 8);
   const r = Math.round(Math.max(MIN_R, Math.min(MAX_R, dn/2*sc)));
 
+  // Parse modifiers — only +N bleed makes sense for a circle
+  const modsStr = String(mods||'');
+  const bleedRaw = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
+  const db = bleedRaw ? Math.max(2, Math.round(parseFloat(bleedRaw.replace(',','.'))*sc)) : 0;
+
   const EXT=6, PL=8, PT=8, DG=8, AL=6, AW=2.5;
   const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
 
   const dTextW = Math.ceil(dText.length*7)+6;
   const cw = Math.max(2*(r+EXT), dTextW);
-  const cx = PL+cw/2, cy = PT+r+EXT;
-  const dly = cy+r+DG;          // dim line BELOW circle bottom
+  const cx = PL+cw/2;
+  // cy shifted down by db so outer circle (r+db) fits with PT+EXT clearance above
+  const cy = PT+db+r+EXT;
+  const dly = cy+r+db+DG;         // dim line below OUTER circle bottom
   const TW = PL+cw+PL;
-  const TH = dly+16+6;           // +16 label, +6 bottom margin
+  const TH = dly+16+6;
 
   const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
-  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';
+  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';   // center lines
   const el='stroke="'+dim+'" stroke-width="0.6"';
   const dl='stroke="'+dim+'" stroke-width="0.8"';
   const aw='stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
+  const bst='stroke="'+di+'" fill="none" stroke-width="0.75" stroke-dasharray="5,3"'; // bleed
 
   const dGap = Math.max(4, Math.min(r-AL-6, (dText.length*6.8+6)/2));
-
   const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW);
   const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW);
 
-  return '<svg class="r-dimbox r-dimbox-circle" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
-       + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(dText)+'">'
-       + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>'
-       + '<line x1="'+(cx-r-EXT)+'" y1="'+cy+'" x2="'+(cx+r+EXT)+'" y2="'+cy+'" '+cl+'/>'
-       + '<line x1="'+cx+'" y1="'+(cy-r-EXT)+'" x2="'+cx+'" y2="'+(cy+r+EXT)+'" '+cl+'/>'
-       // Extension lines from equator (cx±r, cy) DOWN to dly
-       + '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+(dly-2)+'" '+el+'/>'
-       + '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+(dly-2)+'" '+el+'/>'
-       + '<line x1="'+(cx-r)+'" y1="'+dly+'" x2="'+(cx-dGap)+'" y2="'+dly+'" '+dl+'/>'
-       + '<line x1="'+(cx+dGap)+'" y1="'+dly+'" x2="'+(cx+r)+'" y2="'+dly+'" '+dl+'/>'
-       + '<path d="'+awL(cx-r,dly)+'" '+aw+'/>'
-       + '<path d="'+awR(cx+r,dly)+'" '+aw+'/>'
-       + '<text x="'+cx+'" y="'+dly+'" text-anchor="middle" dominant-baseline="central" '
-       + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(dText)+'</text>'
-       + '</svg>';
+  let o = '<svg class="r-dimbox r-dimbox-circle" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
+        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(dText)+'">';
+
+  // Bleed outer circle (drawn first — behind inner)
+  if(db>0)
+    o += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+db)+'" '+bst+'/>';
+
+  // Inner circle (product/trim size)
+  o += '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>';
+
+  // Center crosshair (extends EXT beyond inner circle, marks product boundary)
+  o += '<line x1="'+(cx-r-EXT)+'" y1="'+cy+'" x2="'+(cx+r+EXT)+'" y2="'+cy+'" '+cl+'/>';
+  o += '<line x1="'+cx+'" y1="'+(cy-r-EXT)+'" x2="'+cx+'" y2="'+(cy+r+EXT)+'" '+cl+'/>';
+
+  // Extension lines from inner equator (cx±r, cy) down to dim line
+  o += '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+(dly-2)+'" '+el+'/>';
+  o += '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+(dly-2)+'" '+el+'/>';
+
+  // Dim line showing INNER (trim) diameter
+  o += '<line x1="'+(cx-r)+'" y1="'+dly+'" x2="'+(cx-dGap)+'" y2="'+dly+'" '+dl+'/>';
+  o += '<line x1="'+(cx+dGap)+'" y1="'+dly+'" x2="'+(cx+r)+'" y2="'+dly+'" '+dl+'/>';
+  o += '<path d="'+awL(cx-r,dly)+'" '+aw+'/><path d="'+awR(cx+r,dly)+'" '+aw+'/>';
+  o += '<text x="'+cx+'" y="'+dly+'" text-anchor="middle" dominant-baseline="central" '
+     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(dText)+'</text>';
+
+  return o+'</svg>';
 }
+
 
 
 
@@ -434,7 +453,7 @@ export function inline(text){
   RE_DIMBOX.lastIndex = 0;
   s = s.replace(RE_DIMBOX, (m, w, h, u, mods) => `${dimBoxes.push({kind:'rect', w, h, u, mods: mods||''}) - 1}`);
   RE_DIMCIRCLE.lastIndex = 0;
-  s = s.replace(RE_DIMCIRCLE, (m, d, u) => `${dimBoxes.push({kind:'circle', d, u}) - 1}`);
+  s = s.replace(RE_DIMCIRCLE, (m, d, u, mods) => `${dimBoxes.push({kind:'circle', d, u, mods: mods||''}) - 1}`);
 
   // Одиночная [ссылка] на переменную вне формулы — подставляем её значение.
   // «= [имя] грн» — как обычная цена с «=»: идёт в Σ; «[имя] грн» — прочая цена.
@@ -499,7 +518,7 @@ export function inline(text){
   s = s.replace(/(\d+)/g, (m, i) => {
     const box = dimBoxes[+i];
     return box.kind === 'circle'
-      ? buildDimCircleSVG(box.d, box.u)
+      ? buildDimCircleSVG(box.d, box.u, box.mods || '')
       : buildDimSVG(box.w, box.h, box.u, box.mods || '');
   });
 
