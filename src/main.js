@@ -730,6 +730,14 @@ const TBI = {
                   + ' 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>'),              // eye-off
   hideBlock: tbIcon('<path d="m15 18-.722-3.25"/><path d="M2 8a10.645 10.645 0 0 0 20 0"/>'
                   + '<path d="m20 15-1.726-2.05"/><path d="m4 15 1.726-2.05"/><path d="m9 18 .722-3.25"/>'), // eye-closed
+  dimBox:    tbIcon('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>'
+                  + '<path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>'
+                  + '<rect width="7" height="5" x="7" y="7" rx="1"/>'
+                  + '<path d="M7 17H5"/><path d="M19 17h-2"/>'
+                  + '<path d="M12 21v-2"/><path d="M12 5V3"/>'),           // frame-square (ruler sketch)
+  dimCirc:   tbIcon('<circle cx="12" cy="12" r="10"/>'
+                  + '<path d="M12 2v4"/><path d="M12 18v4"/>'
+                  + '<path d="M2 12h4"/><path d="M18 12h4"/>'),            // circle with crosshair
   bold:      tbIcon('<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>'), // bold
   italic:    tbIcon('<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/>'
                   + '<line x1="15" x2="9" y1="4" y2="20"/>'),                                // italic
@@ -737,6 +745,7 @@ const TBI = {
                   + '<line x1="4" x2="20" y1="12" y2="12"/>'),                               // strikethrough
   mark:      tbIcon('<path d="m9 11-6 6v3h9l3-3"/>'
                   + '<path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>'), // highlighter
+  code:      tbIcon('<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>'),                     // code
   date:      tbIcon('<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/>'
                   + '<path d="M3 10h18"/>'),                                                 // calendar
   dateTime:  tbIcon('<path d="M16 14v2.2l1.6 1"/><path d="M16 2v4"/>'
@@ -773,6 +782,8 @@ function buildSyntax(){
     { ico:'table',   table:true,    w:'| A | B |',    g:t('sTable') },
     { ico:'callout', line:'! ',  cls:'callout', on:/^!{1,2}\s/, w:'! / !!',    g:t('sCallout'),
       menu:[['!','! '],['!!','!! ']] },
+    { ico:'dimBox',  ins:'[50x90мм]', sel:'50x90', w:'[50x90мм]',  g:t('sDimBox') },
+    { ico:'dimCirc', ins:'[d50мм]',  sel:'50',    w:'[d50мм]',    g:t('sDimCirc') },
     { ico:'hrThin',  block:'---\n', w:'---',          g:t('sHrThin'),
       menu:[['—','---\n'],['≡','===\n']] },
     {                               w:'===',          g:t('sHrBold') },
@@ -784,6 +795,10 @@ function buildSyntax(){
     { ico:'italic',  wrap:'*',  ph:t('exItalic'), w:'*…*',     g:t('sItalic') },
     { ico:'strike',  wrap:'~~', ph:t('exStrike'), w:'~~…~~',   g:t('sStrike') },
     { ico:'mark',    wrap:'==', ph:t('exMark'),   w:'== … ==', g:t('sMark') },
+    { ico:'code',    wrap:'`',  ph:t('exCode'),   w:'`…`',     g:t('sCode') },
+    {                w:'-> · <- · <->',  g:t('sArrow') },
+    {                w:'10x15 · м2 · ...', g:t('sTypo') },
+    {                w:'(c) · (tm) · +-', g:t('sSym') },
     {                w:'https://…', g:t('sLink') },
     { ico:'date',     ins:'[date]',      w:`[date] → ${exDate}`, g:t('sDate', { date: exDate }) },
     { ico:'dateTime', ins:'[date:time]', w:'[date:time]',        g:t('sDateTime', { datetime: exDateTime }) },

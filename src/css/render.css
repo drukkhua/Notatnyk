@@ -55,7 +55,24 @@
 .rendered em{font-style:italic;}
 .rendered del{color:var(--done);}
 .rendered mark{background:var(--mark);color:var(--mark-tx);padding:1px 5px;border-radius:4px;}
+/* Инлайн-код `…` — моноширинный чип в рамке (как ` в стандартном .md). Уходит и в
+   ЭКСПОРТ, поэтому только явные var()-цвета. Легко выделить и скопировать. */
+.rendered code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.9em;
+  background:var(--code-bg);color:var(--code-tx);border:1px solid var(--code-line);
+  border-radius:5px;padding:.08em .4em;word-break:break-word;}
 .rendered a{color:var(--focus);text-underline-offset:2px;word-break:break-all;}
+
+/* ── Габаритные эскизы [50x90мм] / [d50мм] ──────────────────────────────────
+   Плывут вправо «газетным» образом — текст обтекает слева. display:flow-root на
+   блочных контейнерах создаёт BFC, сдерживающий float без clipping overflow.
+   В экспорте: tokens.css подключён → var() работают. SVG с overflow:visible —
+   метки не обрезаются если вылезают за viewBox. */
+.r-dimbox{float:right;margin:2px 0 12px 16px;clear:right;overflow:visible;
+  max-width:50%;flex-shrink:0;}
+/* Контейнеры, которые могут содержать эскиз, создают BFC чтобы float не «убегал» */
+.r-p,.r-li,.r-num,.r-h1,.r-h2,.r-h3{display:flow-root;}
+/* После разделителей и «Итого» — сброс float, чтобы эскиз не «перетекал» в соседнюю секцию */
+.r-hr,.r-hr2,.r-total{clear:both;}
 
 /* ── Пресет «Документ» (Э1.1): типографика сметы для клиента ────────────────
    Чисто визуальный класс на #out; движок не знает о пресете. Тот же класс

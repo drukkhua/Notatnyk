@@ -188,8 +188,124 @@ export function calc(input){
 }
 
 // Инлайн-разметка. Возвращает {html, sum} где sum — цены с "=".
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ГАБАРИТ-ЭСКИЗ [50x90мм] — пропорциональный прямоугольник с размерными
+// стрелками, как технический набросок изделия (визитка, листовка, этикетка).
+// Формат: [WxHunit] — числа (целые или дробные через «,»/«.»); разделитель
+// x/X/х(кир)/Х(кир)/×; единица мм/mm/см/cm/дм/dm/м/m. Только в рендере и
+// экспорте; inlineSource не трогает паттерн (инвариант И1). Вырезается ДО
+// varRef и perUnitExpand — защита от ложной трактовки «57» как qty.
+// ─────────────────────────────────────────────────────────────────────────────
+const RE_DIMBOX = /\[(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))\]/g;
+
+function buildDimSVG(wRaw, hRaw, unitRaw) {
+  const wn = parseFloat(String(wRaw).replace(',','.'));
+  const hn = parseFloat(String(hRaw).replace(',','.'));
+  if(!isFinite(wn)||!isFinite(hn)||wn<=0||hn<=0)
+    return esc('['+wRaw+'x'+hRaw+unitRaw+']');
+  const uMap={'mm':'мм','мм':'мм','cm':'см','см':'см','dm':'дм','дм':'дм','m':'м','м':'м'};
+  const uLbl = uMap[unitRaw.toLowerCase()] || unitRaw;
+  const wNum = Number.isInteger(wn) ? String(wn) : String(wRaw).replace('.',',');
+  const hNum = Number.isInteger(hn) ? String(hn) : String(hRaw).replace('.',',');
+  const wText = wNum+' '+uLbl, hText = hNum+' '+uLbl;
+
+  const MW=148, MH=128, MIN_D=44;
+  const sc = Math.min(MW/wn, MH/hn, 8);
+  const rw = Math.round(Math.max(MIN_D, Math.min(MW, wn*sc)));
+  const rh = Math.round(Math.max(MIN_D, Math.min(MH, hn*sc)));
+
+  const PL=8, PT=8, GAP=10, AL=7, AW=2.5;
+  const RT = Math.max(52, Math.ceil(hText.length*6.5)+16);
+  const TW=PL+rw+GAP+RT, TH=PT+rh+GAP+19;
+  const rx=PL, ry=PT, dly=ry+rh+GAP, dlx=rx+rw+GAP;
+
+  const st='var(--ink-soft)', bg='var(--paper)', di='var(--formula)';
+  const mono='ui-monospace,&quot;SF Mono&quot;,Menlo,Consolas,monospace';
+  // Заполненные треугольные стрелки — стандарт технического чертежа (изящнее шевронов)
+  const aw='fill="'+di+'" stroke="none"';
+  const ext='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="3,2"';
+  const dl='stroke="'+di+'" stroke-width="0.85"';
+  const aR=(x,y)=>'M'+x+','+y+' L'+(x-AL)+','+(y-AW)+' L'+(x-AL)+','+(y+AW)+' Z';
+  const aL=(x,y)=>'M'+x+','+y+' L'+(x+AL)+','+(y-AW)+' L'+(x+AL)+','+(y+AW)+' Z';
+  const aD=(x,y)=>'M'+x+','+y+' L'+(x-AW)+','+(y-AL)+' L'+(x+AW)+','+(y-AL)+' Z';
+  const aU=(x,y)=>'M'+x+','+y+' L'+(x-AW)+','+(y+AL)+' L'+(x+AW)+','+(y+AL)+' Z';
+  return '<svg class="r-dimbox" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
+       + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(wText)+' × '+esc(hText)+'">'
+       + '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st+'" fill="'+bg+'" stroke-width="1.2" rx="1"/>'
+       + '<line x1="'+rx+'" y1="'+(ry+rh+3)+'" x2="'+rx+'" y2="'+(dly-2)+'" '+ext+'/>'
+       + '<line x1="'+(rx+rw)+'" y1="'+(ry+rh+3)+'" x2="'+(rx+rw)+'" y2="'+(dly-2)+'" '+ext+'/>'
+       + '<line x1="'+(rx+rw+3)+'" y1="'+ry+'" x2="'+(dlx-2)+'" y2="'+ry+'" '+ext+'/>'
+       + '<line x1="'+(rx+rw+3)+'" y1="'+(ry+rh)+'" x2="'+(dlx-2)+'" y2="'+(ry+rh)+'" '+ext+'/>'
+       + '<line x1="'+rx+'" y1="'+dly+'" x2="'+(rx+rw)+'" y2="'+dly+'" '+dl+'/>'
+       + '<path d="'+aR(rx,dly)+'" '+aw+'/><path d="'+aL(rx+rw,dly)+'" '+aw+'/>'
+       + '<text x="'+(rx+rw/2)+'" y="'+(dly+14)+'" text-anchor="middle" font-size="9.5" fill="'+di+'" font-family="'+mono+'">'+esc(wText)+'</text>'
+       + '<line x1="'+dlx+'" y1="'+ry+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+dl+'/>'
+       + '<path d="'+aD(dlx,ry)+'" '+aw+'/><path d="'+aU(dlx,ry+rh)+'" '+aw+'/>'
+       + '<text x="'+(dlx+7)+'" y="'+(ry+rh/2+3.5)+'" text-anchor="start" font-size="9.5" fill="'+di+'" font-family="'+mono+'">'+esc(hText)+'</text>'
+       + '</svg>';
+}
+
+// Круговой эскиз [d50мм]: окружность с крестом центровых линий и размерной
+// стрелкой диаметра (ø). Разделитель: буква d/D (diameter). Те же правила безопасности,
+// что и buildDimSVG: вырезается до varRef/perUnitExpand.
+const RE_DIMCIRCLE = /\[[dD](\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))\]/g;
+
+function buildDimCircleSVG(dRaw, unitRaw) {
+  const dn = parseFloat(String(dRaw).replace(',','.'));
+  if(!isFinite(dn)||dn<=0) return esc('[d'+dRaw+unitRaw+']');
+  const uMap={'mm':'мм','мм':'мм','cm':'см','см':'см','dm':'дм','дм':'дм','m':'м','м':'м'};
+  const uLbl = uMap[unitRaw.toLowerCase()] || unitRaw;
+  const dNum = Number.isInteger(dn) ? String(dn) : String(dRaw).replace('.',',');
+  const dText = 'ø '+dNum+' '+uLbl;   // ø + thin-space + value + unit
+
+  const MAX_R=64, MIN_R=22;
+  const sc = Math.min(MAX_R*2/dn, 8);
+  const r = Math.round(Math.max(MIN_R, Math.min(MAX_R, dn/2*sc)));
+
+  const EXT=6, PL=8, PT=8, GAP=10, PB=20, AL=7, AW=2.5;
+  const labelW = Math.ceil(dText.length*7)+6;
+  const contentW = Math.max(2*(r+EXT), labelW);
+  const TW = PL+contentW+PL;   // symmetric left/right padding
+  const TH = PT+2*(r+EXT)+GAP+PB;
+  const cx = PL+contentW/2, cy = PT+r+EXT, dly = cy+r+GAP;
+
+  const st='var(--ink-soft)', di='var(--formula)';
+  const mono='ui-monospace,&quot;SF Mono&quot;,Menlo,Consolas,monospace';
+  const aw='fill="'+di+'" stroke="none"';
+  // Center lines: longer dash to distinguish from extension lines
+  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';
+  const ext='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="3,2"';
+  const dl='stroke="'+di+'" stroke-width="0.85"';
+  const aR=(x,y)=>'M'+x+','+y+' L'+(x-AL)+','+(y-AW)+' L'+(x-AL)+','+(y+AW)+' Z';
+  const aL=(x,y)=>'M'+x+','+y+' L'+(x+AL)+','+(y-AW)+' L'+(x+AL)+','+(y+AW)+' Z';
+  return '<svg class="r-dimbox r-dimbox-circle" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
+       + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(dText)+'">'
+       // Circle outline
+       + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.2"/>'
+       // Center crosshair (long-dash center lines, extend EXT beyond circle)
+       + '<line x1="'+(cx-r-EXT)+'" y1="'+cy+'" x2="'+(cx+r+EXT)+'" y2="'+cy+'" '+cl+'/>'
+       + '<line x1="'+cx+'" y1="'+(cy-r-EXT)+'" x2="'+cx+'" y2="'+(cy+r+EXT)+'" '+cl+'/>'
+       // Extension lines from diameter endpoints (short-dash) down to dimension line
+       + '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+(dly-2)+'" '+ext+'/>'
+       + '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+(dly-2)+'" '+ext+'/>'
+       // Dimension line + arrowheads (inward, solid triangles)
+       + '<line x1="'+(cx-r)+'" y1="'+dly+'" x2="'+(cx+r)+'" y2="'+dly+'" '+dl+'/>'
+       + '<path d="'+aR(cx-r,dly)+'" '+aw+'/><path d="'+aL(cx+r,dly)+'" '+aw+'/>'
+       // Label: ø N unit
+       + '<text x="'+cx+'" y="'+(dly+14)+'" text-anchor="middle" font-size="9.5" fill="'+di+'" font-family="'+mono+'">'+esc(dText)+'</text>'
+       + '</svg>';
+}
+
 export function inline(text){
   let s = esc(text), sum = 0;
+
+  // Инлайн-код `…`: вырезаем ПЕРВЫМ и возвращаем ПОСЛЕДНИМ. Содержимое дословно —
+  // его не трогают ни деньги/формулы, ни **/*/==/~~ и авто-ссылки (как backtick-код
+  // в стандартном Markdown). На месте — плейсхолдер вида «индекс» (частная зона
+  // Юникода: не встречается в тексте и не ловится ни одной регуляркой ниже).
+  const codes = [];
+  s = s.replace(/`([^`\n]+)`/g, (m, c) => `${codes.push(c) - 1}`);
 
   // Цена = число, стоящее прямо перед "грн". Определяем, есть ли перед этим
   // числом знак "=" (возможно с пробелами) — тогда цена идёт в Σ.
@@ -251,6 +367,14 @@ export function inline(text){
     return `${formula}${eq}<span class="calc-res">${fmtNum(r)}</span>`;
   });
 
+  // Габарит [WxHunit]: вырезаем ДО varRef/perUnitExpand — иначе «57» из «[57x175мм]»
+  // было бы принято как qty и делило бы ближайшее «Итого» на 57.
+  const dimBoxes = [];
+  RE_DIMBOX.lastIndex = 0;
+  s = s.replace(RE_DIMBOX, (m, w, h, u) => `${dimBoxes.push({kind:'rect', w, h, u}) - 1}`);
+  RE_DIMCIRCLE.lastIndex = 0;
+  s = s.replace(RE_DIMCIRCLE, (m, d, u) => `${dimBoxes.push({kind:'circle', d, u}) - 1}`);
+
   // Одиночная [ссылка] на переменную вне формулы — подставляем её значение.
   // «= [имя] грн» — как обычная цена с «=»: идёт в Σ; «[имя] грн» — прочая цена.
   // Строковая переменная подставляется текстом (url дальше авто-линкуется).
@@ -274,12 +398,52 @@ export function inline(text){
     return `${eq || ''}<span class="var-ref">${fmtVar(v)}</span>`;
   });
 
+  // Умные подстановки (типографика best-practice) — только рендер/экспорт. В
+  // «Исходнике» и симбиозе символы остаются как есть (инвариант И1), поэтому здесь,
+  // а не в inlineSource(). Стоят ПОСЛЕ денег/переменных (не мешают Σ и лукапу
+  // [имён]) и ДО авто-ссылок (не портят href). «<»/«>» уже экранированы в &lt;/&gt;,
+  // так что стрелки ловят только текст автора, а не теги <span> от денег.
+  s = s.replace(/&lt;-+&gt;/g, '↔')                       // <-> ↔
+       .replace(/-+&gt;/g, '→')                           // ->  →  (как «→» в расчётах)
+       .replace(/&lt;-+/g, '←')                           // <-  ←
+       .replace(/(\d)(\s*)[xх](\s*)(?=\d)/g, '$1$2×$3')   // 10x15 / 10х15 → 10×15 (размеры)
+       .replace(/\.\.\./g, '…')                           // ...  …
+       .replace(/\([cCсС]\)/g, '©')                       // (c) ©
+       .replace(/\([rR]\)/g, '®')                         // (r) ®
+       .replace(/\([tT][mM]\)/g, '™')                     // (tm) ™
+       // Допуск ±5 / ±0,5 мм: «+-»/«+/-» ТОЛЬКО как префикс значения (в начале, после
+       // пробела или «(»). Перед цифрой/формулой («10+-5», «</span>+-5») не трогаем —
+       // там это арифметика, калькулятор уже её посчитал выше.
+       .replace(/(^|[\s(])\+\/?-(?=\s*[\d.,])/g, '$1±')
+       // Единицы площади/объёма: «2»/«3» после строчной метрич. единицы → степень
+       // (м2→м², см3→см³, m2→m²). Единица отделена не-буквами с обеих сторон, поэтому
+       // «team2», «H2O», «BMW М3» (заглавная) и т.п. не трогаются.
+       .replace(/(^|[^A-Za-zА-Яа-яЁёІіЇїЄєҐґ])(см|мм|км|дм|м|cm|mm|km|dm|m)([23])(?![\dA-Za-zА-Яа-яЁёІіЇїЄєҐґ])/g,
+                (m0, pre, u, n) => pre + u + (n === '2' ? '²' : '³'));
+
   s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   s = s.replace(/==\s*([^=]+?)\s*==/g,'<mark>$1</mark>');
   s = s.replace(/~~([^~]+)~~/g,'<del>$1</del>');
   s = s.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g,'$1<em>$2</em>');
+  // Двойные (жирные) стрелки — двухлинейные глифы, «жирный» аналог → ← ↔. Идут
+  // ПОСЛЕ денег (calc/цена уже забрали свои «=») и ПОСЛЕ «==»-выделения (иначе съели
+  // бы закрывающие «==»), но ДО авто-ссылок (не портим href). Теги <mark>/<strong>
+  // используют настоящие «<»/«>», а мы ловим экранированные &lt;/&gt; — значит только
+  // авторский текст, не разметку. «<= 500 грн» остаётся ценой в Σ (деньги важнее).
+  s = s.replace(/&lt;=+&gt;/g,'⇔').replace(/=+&gt;/g,'⇒').replace(/&lt;=+/g,'⇐');
   s = s.replace(/(https?:\/\/[^\s<]+)/g,
     '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
+  // Возврат эскизов-габаритов: SVG-набросок с размерными стрелками.
+  s = s.replace(/(\d+)/g, (m, i) => {
+    const box = dimBoxes[+i];
+    return box.kind === 'circle'
+      ? buildDimCircleSVG(box.d, box.u)
+      : buildDimSVG(box.w, box.h, box.u);
+  });
+
+  // Возврат инлайн-кода: моноширинный чип в рамке (стили — .rendered code).
+  s = s.replace(/(\d+)/g, (m, i) => `<code>${codes[+i]}</code>`);
 
   return { html: s, sum };
 }
@@ -665,6 +829,10 @@ const edSyn = s => `<span class="ed-syn">${esc(s)}</span>`;
 // всё дословно (textContent == исходная строка).
 function inlineSource(text){
   let s = esc(text);
+  // инлайн-код `…`: содержимое вырезаем (плейсхолдер), маркеры-кавычки покажем серым,
+  // тело — как <code>. textContent строки при этом остаётся исходным (инвариант И1).
+  const codes = [];
+  s = s.replace(/`([^`\n]+)`/g, (m, c) => `${codes.push(c) - 1}`);
   // цена: весь фрагмент дословно в чип; counted (синий), если «=»/«:» и без «\».
   s = s.replace(RE.price, (m, edEsc, eq, dot) => {
     if(dot === '.' || dot === ',') return m;          // дробная часть — не цена
@@ -676,6 +844,8 @@ function inlineSource(text){
   s = s.replace(/~~([^~]+)~~/g,     `${edSyn('~~')}<del>$1</del>${edSyn('~~')}`);
   s = s.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, `$1${edSyn('*')}<em>$2</em>${edSyn('*')}`);
   s = s.replace(/(https?:\/\/[^\s<]+)/g, '<span class="ed-link">$1</span>');
+  s = s.replace(/(\d+)/g, (m, i) =>
+    edSyn('`') + `<code>${codes[+i]}</code>` + edSyn('`'));
   return s;
 }
 

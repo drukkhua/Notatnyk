@@ -51,3 +51,6 @@
 .sym .ed-money.counted{background:var(--sum-bg);color:var(--sum-tx);border-radius:999px;padding:0 7px;}
 .sym strong{font-weight:800;} .sym em{font-style:italic;} .sym del{color:var(--done);}
 .sym mark{background:var(--mark);color:var(--mark-tx);padding:0 3px;border-radius:3px;}
+.sym code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.88em;
+  background:var(--code-bg);color:var(--code-tx);border:1px solid var(--code-line);
+  border-radius:4px;padding:0 .35em;}
