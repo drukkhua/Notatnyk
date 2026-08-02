@@ -265,11 +265,24 @@ function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   o += '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st
      + '" fill="var(--paper)" stroke-width="1.5" rx="'+dr+'" ry="'+dr+'"/>';
 
-  // Diagonal X cross
-  o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
-  o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-  // Биговка (fold): пунктир «цепочка» 8-3-2-3, стандарт для линий сгиба.
-  // Перпендикулярна длинной стороне: вертикаль для пейзажа/квадрата, горизонталь для портрета.
+  // Diagonal X cross — при fold каждая секция получает свой крест, не один на весь лист
+  if(hasFold && rh>rw){
+    // портрет: горизонтальная биговка в cy — верхняя и нижняя секции
+    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+cy+'" '+xt+'/>';
+    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+cy+'" '+xt+'/>';
+    o += '<line x1="'+rx+'" y1="'+cy+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
+    o += '<line x1="'+(rx+rw)+'" y1="'+cy+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+  } else if(hasFold){
+    // пейзаж/квадрат: вертикальная биговка в cx — левая и правая секции
+    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+    o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+    o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
+    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+  } else {
+    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
+    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
+  }
+  // Биговка: пунктир «цепочка» 8-3-2-3 (стандарт для линий сгиба)
   if(hasFold){
     const fl='stroke="'+dim+'" stroke-width="0.9" stroke-dasharray="8,3,2,3"';
     if(rh>rw) o += '<line x1="'+rx+'" y1="'+cy+'" x2="'+(rx+rw)+'" y2="'+cy+'" '+fl+'/>';
