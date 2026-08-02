@@ -215,66 +215,57 @@ function buildDimSVG(wRaw, hRaw, unitRaw) {
   const rw = Math.round(Math.max(MIN_D, Math.min(MW, wn*sc)));
   const rh = Math.round(Math.max(MIN_D, Math.min(MH, hn*sc)));
 
-  // Layout: dim-line ABOVE (width) and RIGHT (height) of rect — matches reference image.
-  // PT = top space for width dim-line; DG = gap rect↔dim-line; PR = right for rotated label.
-  const PL=8, PT=22, DG=8, PB=8, PR=14, AL=6, AW=2.5;
+  // Layout: dim line BELOW rect (width) and to the RIGHT (height).
+  const PL=8, PT=8, DG=8, PR=14, AL=6, AW=2.5;
   const rx=PL, ry=PT;
-  const dim_y = ry-DG;       // y of width dim-line (above rect)
-  const dlx   = rx+rw+DG;   // x of height dim-line (right of rect)
-  const TW=PL+rw+DG+PR, TH=PT+rh+PB;
+  const dim_y = ry+rh+DG;      // width dim line — below rect bottom
+  const dlx   = rx+rw+DG;      // height dim line — right of rect
+  const TH = PT+rh+DG+16+6;    // +16 label height, +6 bottom margin
+  const TW = PL+rw+DG+PR;
   const cx=rx+rw/2, cy=ry+rh/2;
 
-  // Text gap: label sits IN the dim-line (line is broken by a gap sized for the text).
   const wGap = Math.max(4, Math.min(rw/2-AL-6, (wText.length*6.8+6)/2));
   const hGap = Math.max(4, Math.min(rh/2-AL-6, (hText.length*6.8+6)/2));
 
   const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
   const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
-  const xt='stroke="'+di+'" stroke-width="0.7" stroke-dasharray="4,3"';   // X diagonals
-  const el='stroke="'+dim+'" stroke-width="0.6"';                          // extension lines
-  const dl='stroke="'+dim+'" stroke-width="0.8"';                          // dim lines
+  const xt='stroke="'+di+'" stroke-width="0.7" stroke-dasharray="4,3"';
+  const el='stroke="'+dim+'" stroke-width="0.6"';
+  const dl='stroke="'+dim+'" stroke-width="0.8"';
   const aw='stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
 
-  // Outward open-chevron arrowheads (tip at the given point, body extends outward):
-  const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW); // ← tip left
-  const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW); // → tip right
-  const awU=(x,y)=>'M '+(x-AW)+','+(y+AL)+' L '+x+','+y+' L '+(x+AW)+','+(y+AL); // ↑ tip top
-  const awD=(x,y)=>'M '+(x-AW)+','+(y-AL)+' L '+x+','+y+' L '+(x+AW)+','+(y-AL); // ↓ tip bottom
+  const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW);
+  const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW);
+  const awU=(x,y)=>'M '+(x-AW)+','+(y+AL)+' L '+x+','+y+' L '+(x+AW)+','+(y+AL);
+  const awD=(x,y)=>'M '+(x-AW)+','+(y-AL)+' L '+x+','+y+' L '+(x+AW)+','+(y-AL);
 
   return '<svg class="r-dimbox" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(wText)+' × '+esc(hText)+'">'
-       // Rect outline
        + '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>'
-       // Diagonal X cross (classic technical-drawing placeholder)
        + '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>'
        + '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>'
-       // Width: extension lines from top corners up to dim_y
-       + '<line x1="'+rx+'" y1="'+ry+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>'
-       + '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+el+'/>'
-       // Width: dim line in two halves (gap for label in the middle)
+       // Width: extension lines from BOTTOM corners down to dim_y
+       + '<line x1="'+rx+'" y1="'+(ry+rh)+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>'
+       + '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+el+'/>'
        + '<line x1="'+rx+'" y1="'+dim_y+'" x2="'+(cx-wGap)+'" y2="'+dim_y+'" '+dl+'/>'
        + '<line x1="'+(cx+wGap)+'" y1="'+dim_y+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+dl+'/>'
-       // Width: outward arrows ← →
        + '<path d="'+awL(rx,dim_y)+'" '+aw+'/>'
        + '<path d="'+awR(rx+rw,dim_y)+'" '+aw+'/>'
-       // Width: label centered on dim line
        + '<text x="'+cx+'" y="'+dim_y+'" text-anchor="middle" dominant-baseline="central" '
        + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(wText)+'</text>'
        // Height: extension lines from right corners rightward to dlx
        + '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+dlx+'" y2="'+ry+'" '+el+'/>'
        + '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+el+'/>'
-       // Height: dim line in two halves (gap for rotated label)
        + '<line x1="'+dlx+'" y1="'+ry+'" x2="'+dlx+'" y2="'+(cy-hGap)+'" '+dl+'/>'
        + '<line x1="'+dlx+'" y1="'+(cy+hGap)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+dl+'/>'
-       // Height: outward arrows ↑ ↓
        + '<path d="'+awU(dlx,ry)+'" '+aw+'/>'
        + '<path d="'+awD(dlx,ry+rh)+'" '+aw+'/>'
-       // Height: label rotated -90° (reads bottom-to-top) on dim line
        + '<text x="'+dlx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="central" '
        + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'" '
        + 'transform="rotate(-90 '+dlx+' '+cy+')">'+esc(hText)+'</text>'
        + '</svg>';
 }
+
 
 
 // Круговой эскиз [d50мм]: окружность с крестом центровых линий и размерной
@@ -294,21 +285,19 @@ function buildDimCircleSVG(dRaw, unitRaw) {
   const sc = Math.min(MAX_R*2/dn, 8);
   const r = Math.round(Math.max(MIN_R, Math.min(MAX_R, dn/2*sc)));
 
-  // Layout: dim line ABOVE the circle (same style as rect width dim line).
-  const EXT=6;             // center-crosshair extension beyond circle
-  const PL=8, PT=22, DG=8, PB=10, AL=6, AW=2.5;
+  const EXT=6, PL=8, PT=8, DG=8, AL=6, AW=2.5;
   const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
 
   const dTextW = Math.ceil(dText.length*7)+6;
-  const cw = Math.max(2*(r+EXT), dTextW);  // content width (circle or label, whichever wider)
-  const TW = PL + cw + PL;                  // symmetric side padding
-  const TH = PT + 2*(r+EXT) + PB;
-  const cx = PL + cw/2, cy = PT + r + EXT;
-  const dim_y = cy - r - DG;  // y of dim line (above circle top)
+  const cw = Math.max(2*(r+EXT), dTextW);
+  const cx = PL+cw/2, cy = PT+r+EXT;
+  const dly = cy+r+DG;          // dim line BELOW circle bottom
+  const TW = PL+cw+PL;
+  const TH = dly+16+6;           // +16 label, +6 bottom margin
 
   const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
-  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';   // center lines
-  const el='stroke="'+dim+'" stroke-width="0.6"';                           // extension lines
+  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';
+  const el='stroke="'+dim+'" stroke-width="0.6"';
   const dl='stroke="'+dim+'" stroke-width="0.8"';
   const aw='stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
 
@@ -319,25 +308,21 @@ function buildDimCircleSVG(dRaw, unitRaw) {
 
   return '<svg class="r-dimbox r-dimbox-circle" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(dText)+'">'
-       // Circle outline
        + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>'
-       // Center crosshair (long-dash, extends EXT past the circle edges)
        + '<line x1="'+(cx-r-EXT)+'" y1="'+cy+'" x2="'+(cx+r+EXT)+'" y2="'+cy+'" '+cl+'/>'
        + '<line x1="'+cx+'" y1="'+(cy-r-EXT)+'" x2="'+cx+'" y2="'+(cy+r+EXT)+'" '+cl+'/>'
-       // Extension lines from circle equator (cx±r, cy) up to dim_y
-       + '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+dim_y+'" '+el+'/>'
-       + '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+dim_y+'" '+el+'/>'
-       // Dim line in two halves (gap for ø label)
-       + '<line x1="'+(cx-r)+'" y1="'+dim_y+'" x2="'+(cx-dGap)+'" y2="'+dim_y+'" '+dl+'/>'
-       + '<line x1="'+(cx+dGap)+'" y1="'+dim_y+'" x2="'+(cx+r)+'" y2="'+dim_y+'" '+dl+'/>'
-       // Outward arrows ← →
-       + '<path d="'+awL(cx-r,dim_y)+'" '+aw+'/>'
-       + '<path d="'+awR(cx+r,dim_y)+'" '+aw+'/>'
-       // ø label centered on dim line
-       + '<text x="'+cx+'" y="'+dim_y+'" text-anchor="middle" dominant-baseline="central" '
+       // Extension lines from equator (cx±r, cy) DOWN to dly
+       + '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+(dly-2)+'" '+el+'/>'
+       + '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+(dly-2)+'" '+el+'/>'
+       + '<line x1="'+(cx-r)+'" y1="'+dly+'" x2="'+(cx-dGap)+'" y2="'+dly+'" '+dl+'/>'
+       + '<line x1="'+(cx+dGap)+'" y1="'+dly+'" x2="'+(cx+r)+'" y2="'+dly+'" '+dl+'/>'
+       + '<path d="'+awL(cx-r,dly)+'" '+aw+'/>'
+       + '<path d="'+awR(cx+r,dly)+'" '+aw+'/>'
+       + '<text x="'+cx+'" y="'+dly+'" text-anchor="middle" dominant-baseline="central" '
        + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(dText)+'</text>'
        + '</svg>';
 }
+
 
 
 export function inline(text){
