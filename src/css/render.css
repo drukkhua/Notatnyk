@@ -12,8 +12,14 @@
 .r-h2{font-size:16px;font-weight:700;margin:14px 0 6px;}
 .r-h3{font-size:13.5px;font-weight:700;color:var(--ink-soft);margin:12px 0 5px;}
 .r-num{font-size:14px;font-weight:700;margin:3px 0;}
-.r-li{color:var(--ink-soft);margin:3px 0 3px 18px;position:relative;font-size:13.5px;line-height:1.55;}
-.r-li::before{content:"•";position:absolute;left:-14px;color:var(--line-2);font-weight:700;}
+/* Висячий відступ (hanging indent) замість position:absolute — важливо для
+   газетного обтекання: абсолютний маркер позиціонується від краю власного
+   боксу .r-li, ігноруючи плаваючий елемент зліва, і опинявся ПІД ним/на ньому
+   (SVG «наїжджав» на крапку). inline-block фіксованої ширини бере участь у
+   звичайному inline-потоці — переноситься разом із текстом і завжди справа
+   від float. */
+.r-li{color:var(--ink-soft);margin:3px 0;padding-left:18px;text-indent:-18px;font-size:13.5px;line-height:1.55;}
+.r-li::before{content:"•";display:inline-block;width:10px;margin-left:8px;color:var(--line-2);font-weight:700;}
 .r-p{color:var(--ink-soft);margin:3px 0;font-size:13.5px;line-height:1.55;}
 .r-check{display:flex;align-items:center;gap:9px;margin:7px 0;cursor:pointer;user-select:none;}
 .r-check .box{flex:none;width:20px;height:20px;border:2px solid var(--check);border-radius:6px;
@@ -69,7 +75,7 @@
    clear:left гарантирует, что два эскиза подряд стекируются вертикально, а не
    слипаются в строку. Структурные элементы сбрасывают float — текст после
    заголовка/разделителя начинается ниже любого плавающего эскиза. */
-.r-dimbox{float:left;margin:2px 16px 12px 0;clear:left;overflow:visible;max-width:50%;}
+.r-dimbox{float:left;margin:2px 56px 12px 0;clear:left;overflow:visible;max-width:50%;}
 /* Абзац/список с эскизом И текстом: BFC изолирует float внутри блока + clear
    сбрасывает предыдущий standalone-float перед стартом нового «газетного ряда».
    Standalone-эскиз (только SVG, без текста) класса -hd не получает — его float

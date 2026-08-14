@@ -199,6 +199,12 @@ export function calc(input){
 // ─────────────────────────────────────────────────────────────────────────────
 const RE_DIMBOX = /\[(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))((?:[+\s][^\]]*)?)\]/g;
 
+// Виліт [+N]: на практиці завжди 1-4мм (більше не буває). Пряме bleed*sc майже
+// не видно на типовому масштабі — формула не прив'язана до розміру ескізу:
+// кожне значення +N завжди дає однаковий, помітний і відрізнюваний піксельний
+// розмір (1мм→2px, 2мм→4px, 3мм→6px, 4мм→8px), незалежно від sc товару.
+function bleedPx(bleed){ return Math.round(bleed * 2); }
+
 function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   const wn = parseFloat(String(wRaw).replace(',','.'));
   const hn = parseFloat(String(hRaw).replace(',','.'));
@@ -219,7 +225,7 @@ function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
   const modsStr = String(mods||'');
   const bleedRaw  = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
   const radiusRaw = (modsStr.match(/\br=?(\d+(?:[.,]\d+)?)/i)||[])[1];
-  const db = bleedRaw  ? Math.max(2, Math.round(parseFloat(bleedRaw.replace(',','.'))*sc))  : 0;
+  const db = bleedRaw  ? bleedPx(parseFloat(bleedRaw.replace(',','.')))  : 0;
   const dr = radiusRaw ? Math.min(Math.round(parseFloat(radiusRaw.replace(',','.'))*sc), Math.floor(Math.min(rw,rh)/2)) : 0;
   // Outer rect corner: slightly larger radius so both curves feel concentric
   const drOut = dr>0 ? Math.min(dr+db, Math.floor(Math.min(rw+2*db,rh+2*db)/2)) : 0;
@@ -334,7 +340,7 @@ function buildDimCircleSVG(dRaw, unitRaw, mods) {
   // Parse modifiers — only +N bleed makes sense for a circle
   const modsStr = String(mods||'');
   const bleedRaw = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
-  const db = bleedRaw ? Math.max(2, Math.round(parseFloat(bleedRaw.replace(',','.'))*sc)) : 0;
+  const db = bleedRaw ? bleedPx(parseFloat(bleedRaw.replace(',','.'))) : 0;
 
   const EXT=6, PL=8, PT=8, DG=8, AL=6, AW=2.5;
   const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
