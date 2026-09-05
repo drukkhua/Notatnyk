@@ -11,7 +11,8 @@
     "build": "tauri build",
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
-    "android:build": "tauri android build"
+    "android:build": "tauri android build",
+    "test": "node --test"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0"

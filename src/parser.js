@@ -2,6 +2,18 @@
 
 function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
+// Экранирование значения HTML-атрибута — второй рубеж после esc(): esc() не трогает
+// кавычки, а автоссылки/mailto/[оплата]-URL вставляются в href="…". Без этого кавычка
+// в тексте могла бы «выйти» из атрибута и добавить произвольный атрибут (напр. onmouseover=).
+export function escAttr(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Версия синтаксиса ТЗ (грамматика render()/inline()). Увеличивать при любом изменении
+// разбора; должна совпадать с BitrixUI (src/lib/specEngine.ts) и с contract-fixtures
+// (test/spec-fixtures.json) — иначе порты незаметно разойдутся.
+export const SPEC_SYNTAX_VERSION = '1.1.0';
+
 // Иконки — инлайн-SVG из набора Lucide (MIT, lucide.dev). Без зависимостей:
 // вшиты только нужные пути (~0.3 КБ каждая), красятся через currentColor.
 const icon = p => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
@@ -27,6 +39,21 @@ function fmt(n){ return n.toLocaleString('ru-RU'); }
 function fmtNum(n){
   const r = Math.round((n + Number.EPSILON) * 100) / 100;
   return r.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+}
+
+// Единый разбор денег: "10", "10.5", "10,50", "1 250", "1 250,75" — обычные и
+// неразрывные пробелы (JS \s matches U+00A0) снимаются одинаково. Мусор/пусто → 0.
+function parseMoney(str){
+  if(str == null) return 0;
+  const v = parseFloat(String(str).replace(/\s/g, '').replace(',', '.'));
+  return isFinite(v) ? v : 0;
+}
+
+// Разрешённые протоколы для [оплата]-ссылки — только http/https (не javascript: и т.п.).
+function safeHttpUrl(u){
+  if(typeof u !== 'string') return null;
+  const s = u.trim();
+  return /^https?:\/\//i.test(s) ? s : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,6 +103,12 @@ function buildPatterns(){
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
   RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.posVar    = new RegExp(`[=:]\\s*\\[([^\\]]+)\\]\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
+  // Незаполненные шаблонные значения (см. диагностику template_placeholder ниже).
+  // «\b» здесь не подходит — после кириллицы JS \w не срабатывает (см. DIM_UNIT
+  // выше), поэтому граница — тот же NL, что и у остальных денежных паттернов.
+  // «— шт» — тираж не указан; «= 0 грн» — цена изделия не указана.
+  RE.placeholderQty   = new RegExp(`—\\s*${unit}${NL}`, 'i');
+  RE.placeholderPrice = new RegExp(`=\\s*0\\s*${cur}${NL}`, 'i');
 }
 buildPatterns();
 // Применить новые значения ключевых слов (частичный патч) и пересобрать регулярки.
@@ -416,7 +449,7 @@ export function inline(text){
     if(dot === '.' || dot === ',') return m;
     // Число может быть дробным («14322.56» / «14322,56») — пробелы это разряды,
     // запятая/точка внутри — десятичный разделитель.
-    const v = parseFloat(n.replace(/\s/g,'').replace(',','.')) || 0;
+    const v = parseMoney(n);
     // Экранирование «\=» / «\:» — правило Σ НЕ срабатывает: оператор показываем
     // как обычный текст, цена идёт как прочая (вне Σ), сам слэш в рендер не идёт.
     if(esc && eq){
@@ -530,8 +563,10 @@ export function inline(text){
   // используют настоящие «<»/«>», а мы ловим экранированные &lt;/&gt; — значит только
   // авторский текст, не разметку. «<= 500 грн» остаётся ценой в Σ (деньги важнее).
   s = s.replace(/&lt;=+&gt;/g,'⇔').replace(/=+&gt;/g,'⇒').replace(/&lt;=+/g,'⇐');
-  s = s.replace(/(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  // Автоссылка: URL не должен содержать кавычки/угловые скобки — иначе он мог бы «выйти»
+  // из href="…" (см. escAttr выше — второй, независимый от этого исключения рубеж).
+  s = s.replace(/(https?:\/\/[^\s<>"'`]+)/g,
+    (m, url) => `<a href="${escAttr(url)}" target="_blank" rel="noopener">${url}</a>`);
 
   // Возврат эскизов-габаритов: SVG-набросок с размерными стрелками.
   s = s.replace(/(\d+)/g, (m, i) => {
@@ -581,14 +616,17 @@ export function render(text, opts){
   let total = 0, checksTotal = 0, checksDone = 0, positions = 0;
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
   const add = v => { total += v; sectionSum += v; };
-  const sections = [];                         // [{declared, sum}] — по одному на строку «Итого»
+  const sections = [];                         // [{declared, sum, line}] — по одному на строку «Итого»
+  // Компактная диагностика готовности (см. docs/print-spec-parser-render-audit.md, п.4):
+  // {code, severity, line?, message} — данные, а не готовый HTML; UI решает, как показать.
+  const diagnostics = [];
   let lastTotal = null;                        // сумма ближайшего сверху «Итого» — для шаблона [кільк. од.]
   // Шаблон [4000 шт] / [4,2 м.п.] → (сумма/кол-во грн/ед). База — ближайшее «Итого».
   // Кол-во может быть дробным (точка или запятая): [4.2 м.п.], [1 000,5 кг].
   const perUnitExpand = (h, base) => h.replace(
     /\[\s*(\d[\d\s]*(?:[.,]\d+)?)\s*([^\]\d\s][^\]]*?)\s*\]/g,
     (mm, q, unit) => {
-      const qty = parseFloat(q.replace(/\s/g,'').replace(',', '.'));
+      const qty = parseMoney(q);
       if(!qty || base == null) return mm;
       return `<span class="per-unit">(${fmtNum(base / qty)} ${LOCALE.currency}/${unit.trim()})</span>`;
     });
@@ -612,6 +650,18 @@ export function render(text, opts){
   const isTableRow = t => t.startsWith('|') && t.endsWith('|') && (t.match(/\|/g)||[]).length >= 2;
   // строка-разделитель markdown-таблицы: |---|:--:|  — не рисуем как ряд
   const isTableSep = t => /^\|[\s:|-]+\|$/.test(t) && t.includes('-');
+  // Разбор ряда на ячейки: «\|» — экранированный, буквальный «|» внутри ячейки, а не
+  // граница столбца (иначе, например, цена «10\|20 грн» рвала бы ряд пополам).
+  function splitTableRow(row){
+    const cells = []; let cur = '';
+    for(let i = 0; i < row.length; i++){
+      if(row[i] === '\\' && row[i + 1] === '|'){ cur += '|'; i++; continue; }
+      if(row[i] === '|'){ cells.push(cur.trim()); cur = ''; continue; }
+      cur += row[i];
+    }
+    cells.push(cur.trim());
+    return cells;
+  }
 
   for(let lineIdx = 0; lineIdx < lines.length; lineIdx++){
     const raw = lines[lineIdx].trim();
@@ -644,6 +694,14 @@ export function render(text, opts){
     // дальше строка разбирается без маркера «//» — как обычная
     const t = hiddenLine ? raw.replace(/^\/+\s*/, '') : raw;
 
+    // Незаполненные шаблонные значения — видимые строки, скрытые (внутренняя кухня) не считаем.
+    if(!hidden){
+      if(RE.placeholderQty.test(t)) diagnostics.push({ code: 'template_placeholder', severity: 'warning',
+        line: curLine, message: `Не указан тираж («— ${LOCALE.unit}»)` });
+      if(RE.placeholderPrice.test(t)) diagnostics.push({ code: 'template_placeholder', severity: 'warning',
+        line: curLine, message: `Цена не заполнена («= 0 ${LOCALE.currency}»)` });
+    }
+
     // Таблица: собираем подряд идущие строки-ряды. Первый непустой ряд — заголовок.
     // Сканер ниже читает строки как есть, поэтому «// | A |» сюда не пускаем.
     if(isTableRow(t) && !hiddenLine){
@@ -658,9 +716,10 @@ export function render(text, opts){
       if(rows.length){
         let tb = '<table class="r-table">', tsum = 0;
         rows.forEach((rowLine, ri) => {
-          const cells = rowLine.slice(1, -1).split('|').map(c => c.trim());
+          const cells = splitTableRow(rowLine.slice(1, -1));
+          const cellTag = ri === 0 ? 'th' : 'td';
           tb += ri === 0 ? '<tr class="r-tr-head">' : '<tr>';
-          for(const c of cells){ const r = inline(c); add(r.sum); tsum += r.sum; tb += `<td>${r.html}</td>`; }
+          for(const c of cells){ const r = inline(c); add(r.sum); tsum += r.sum; tb += `<${cellTag}>${r.html}</${cellTag}>`; }
           tb += '</tr>';
         });
         emit(tb + '</table>', 'table', { rows: Math.max(0, rows.length - 1), sum: tsum });
@@ -750,6 +809,10 @@ export function render(text, opts){
       checksTotal++; if(done) checksDone++;
       const r = inline(m[2]); add(r.sum);
       const idx = checkLineMap.length; checkLineMap.push(lineIdx);
+      const label = m[2].trim();
+      if(/:$/.test(label) && label.replace(/:$/, '').trim() === '')
+        diagnostics.push({ code: 'template_placeholder', severity: 'warning', line: curLine,
+          message: 'Не заполнено название изделия' });
       emit(`<div class="r-check${done?' done':''}" data-check="${idx}">`
             + `<span class="box">${done?ICO.check:''}</span>`
             + `<span class="txt">${r.html}</span>`
@@ -767,8 +830,10 @@ export function render(text, opts){
     if(m = t.match(RE.totalLine)){
       const rest = m[3];
       const r = inline(rest);                  // текст суммы (обычно без «=», в total не идёт)
-      const dm = rest.match(/\d[\d\s]*/);
-      const declaredHere = dm ? (parseInt(dm[0].replace(/\s/g,''),10)||0) : null;
+      // Дробная часть («10,50»/«10.50») тоже входит в сумму — иначе «Итого: 10,50 грн»
+      // читалось бы как «10» и давало ложное расхождение с суммой позиций/сделки.
+      const dm = rest.match(/\d[\d\s]*(?:[.,]\d+)?/);
+      const declaredHere = dm ? parseMoney(dm[0]) : null;
       const sec = Math.round(sectionSum * 100) / 100;
       let fb;
       if(declaredHere != null){
@@ -776,6 +841,9 @@ export function render(text, opts){
         fb = diff === 0
           ? '<span class="r-total-ok">✓</span>'
           : `<span class="r-total-bad">✕ Σ ${LOCALE.section} ${fmtNum(sec)} (${diff>0?'+':''}${fmtNum(diff)})</span>`;
+        if(diff !== 0)
+          diagnostics.push({ code: 'local_total_mismatch', severity: 'warning', line: curLine,
+            message: `Сумма позиций секции ${fmtNum(sec)} ${LOCALE.currency} не совпадает с «${LOCALE.total}: ${fmtNum(declaredHere)} ${LOCALE.currency}»` });
       }else{
         fb = `<span class="r-total-ok">Σ ${LOCALE.section}: ${fmtNum(sec)} ${LOCALE.currency}</span>`;
       }
@@ -785,15 +853,18 @@ export function render(text, opts){
       if(restHtml.trim()) parts.push(restHtml);
       parts.push(fb);
       emit(`<div class="r-total">${parts.join(' ')}</div>`, 'total', { declared: declaredHere });
-      sections.push({ declared: declaredHere, sum: sec });
+      sections.push({ declared: declaredHere, sum: sec, line: curLine });
       lastTotal = effTotal;                     // для [кільк.] на следующих строках
       sectionSum = 0;                           // начинаем новую секцию
       continue;
     }
-    if(m = t.match(/^(\d+)\.\s+(.*)$/)){
+    // Плоская нумерация: "1.", "1.1", "1.2.", "2.1.3" — метка не вложенность, просто
+    // текст, который распознаётся и показывается ровно так, как ввёл пользователь
+    // (без своей системы уровней/перенумерации — см. docs/print-spec-parser-render-audit.md).
+    if(m = t.match(/^(\d+(?:\.\d+)*\.?)\s+(.+)$/)){
       const r = inline(m[2]); add(r.sum);
       const nc = hasDimboxWithText(r.html) ? 'r-num r-num-hd' : 'r-num';
-      emit(`<div class="${nc}">${m[1]}. ${r.html}</div>`, 'num', { sum: r.sum }); continue;
+      emit(`<div class="${nc}">${m[1]} ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
     if(m = t.match(/^[-*]\s+(.*)$/)){
       const r = inline(m[1]); add(r.sum);
@@ -808,11 +879,14 @@ export function render(text, opts){
   }
 
   // «/*» без пары спрятал бы весь хвост заметки молча — говорим об этом вслух.
-  // В EXPORT молчим: предупреждение — для автора, а не для клиента.
-  if(hiddenBlock && !EXPORT){
+  // В EXPORT молчим в HTML (предупреждение — для автора, а не для клиента), но
+  // диагностика возвращается всегда — это данные о состоянии текста, а не рендер.
+  if(hiddenBlock){
     hidden = false; curLine = blockStart;
     const msg = String(LOCALE.unclosed || '').replace('{n}', blockStart + 1);
-    emit(`<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`, 'callout');
+    diagnostics.push({ code: 'unclosed_hidden_block', severity: 'error', line: blockStart, message: msg });
+    if(!EXPORT)
+      emit(`<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`, 'callout');
   }
   const html = blocks.map(b => b.html).join('');
 
@@ -820,7 +894,7 @@ export function render(text, opts){
   let declared = null, declaredSum = 0, hasDeclared = false;
   RE.declared.lastIndex = 0;
   for(const mm of text.matchAll(RE.declared)){
-    declaredSum += parseFloat(mm[1].replace(/\s/g,'').replace(',','.'))||0;
+    declaredSum += parseMoney(mm[1]);
     hasDeclared = true;
   }
   if(hasDeclared) declared = declaredSum;
@@ -849,7 +923,7 @@ export function render(text, opts){
   const validUntil = lookupVar(LOCALE.validVar, 'valid until', 'действительна до');
   const email      = lookupVar(LOCALE.emailVar, 'email', 'e-mail');
   const pay = {
-    url:        typeof payUrl === 'string' ? payUrl : null,
+    url:        safeHttpUrl(payUrl),
     // депозит: число ≤ 1 — доля от итога («30%» → 0.3), > 1 — фикс-сумма
     deposit:    typeof depositRaw === 'number' && depositRaw > 0 ? depositRaw : null,
     validUntil: typeof validUntil === 'string' ? validUntil : null,
@@ -861,6 +935,7 @@ export function render(text, opts){
     blocks,
     stats: { total, checksTotal, checksDone, positions, declared, sections, pay },
     checkLineMap,
+    diagnostics,
     fmt
   };
 }
@@ -1012,7 +1087,7 @@ export function renderSourceLines(text){
       out += `<div ${dl} class="ed-line r-total"><b>${esc(m[1])}${m[2] || ''}</b> ${inlineSource(m[3])}</div>`;
       continue;
     }
-    if(m = t.match(/^(\d+\.)(\s+)(.*)$/)){
+    if(m = t.match(/^(\d+(?:\.\d+)*\.?)(\s+)(.*)$/)){
       out += `<div ${dl} class="ed-line r-num">${esc(m[1] + m[2])}${inlineSource(m[3])}</div>`;
       continue;
     }

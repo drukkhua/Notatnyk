@@ -1,0 +1,138 @@
+{
+  "_meta": {
+    "syntaxVersion": "1.1.0",
+    "note": "Contract-fixtures для движка ТЗ (render()/inline() в src/parser.js и src/lib/specEngine.ts). Копия этого файла должна быть идентична в notatnyk-tauri/test/spec-fixtures.json и BitrixUI/frontend/src/lib/__tests__/spec-fixtures.json — при изменении грамматики обновляй оба файла и SPEC_SYNTAX_VERSION в обоих движках (см. docs/print-spec-parser-render-audit.md, раздел 5)."
+  },
+  "cases": [
+    {
+      "name": "flat-numbering-labels-verbatim",
+      "source": "1. Общие требования\n1.1 Формат\n1.2. Материал\n1.2.1 Ламинация",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": [
+          "<div data-line=\"0\" class=\"r-num\">1. Общие требования</div>",
+          "<div data-line=\"1\" class=\"r-num\">1.1 Формат</div>",
+          "<div data-line=\"2\" class=\"r-num\">1.2. Материал</div>",
+          "<div data-line=\"3\" class=\"r-num\">1.2.1 Ламинация</div>"
+        ]
+      }
+    },
+    {
+      "name": "money-decimal-comma-in-total-line",
+      "source": "Итого: 10,50 грн",
+      "mode": "edit",
+      "expect": {
+        "sections": [{ "declared": 10.5, "sum": 0 }],
+        "diagnosticsInclude": [{ "code": "local_total_mismatch", "line": 0 }]
+      }
+    },
+    {
+      "name": "money-thousands-and-decimal-comma",
+      "source": "Итого: 1 250,75 грн",
+      "mode": "edit",
+      "expect": { "sections": [{ "declared": 1250.75, "sum": 0 }] }
+    },
+    {
+      "name": "multiple-products-sum-not-alternatives",
+      "source": "[ ] Продукт А:\n= 1000 грн\nИтого: 1000 грн\n[ ] Продукт Б:\n= 500 грн\nИтого: 500 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 1500,
+        "declared": 1500,
+        "checksTotal": 2,
+        "checksDone": 0,
+        "positions": 2,
+        "sections": [{ "declared": 1000, "sum": 1000 }, { "declared": 500, "sum": 500 }]
+      }
+    },
+    {
+      "name": "hidden-block-visible-in-edit",
+      "source": "/* внутренняя формула\nсекретный текст\n*/\n= 500 грн",
+      "mode": "edit",
+      "expect": { "total": 500, "htmlIncludes": ["class=\"r-hidden\"", "секретный текст"] }
+    },
+    {
+      "name": "hidden-block-absent-in-export",
+      "source": "/* внутренняя формула\nсекретный текст\n*/\n= 500 грн",
+      "mode": "export",
+      "expect": { "total": 500, "htmlExcludes": ["r-hidden", "секретный текст"] }
+    },
+    {
+      "name": "dangerous-url-quote-and-script-tag-neutralized",
+      "source": "Смотри тут: https://evil.example/\"onmouseover=\"alert(1) и <script>alert(2)</script> тест",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": [
+          "<a href=\"https://evil.example/\" target=\"_blank\" rel=\"noopener\">https://evil.example/</a>",
+          "&lt;script&gt;alert(2)&lt;/script&gt;"
+        ],
+        "htmlExcludes": ["example/\"onmouseover=\"", "<script>alert(2)</script>"]
+      }
+    },
+    {
+      "name": "checkbox-data-line-preserved",
+      "source": "[ ] Task one\n[x] Task two",
+      "mode": "edit",
+      "expect": {
+        "checksTotal": 2,
+        "checksDone": 1,
+        "htmlIncludes": [
+          "<div data-line=\"0\" class=\"r-check\" data-check=\"0\">",
+          "<div data-line=\"1\" class=\"r-check done\" data-check=\"1\">"
+        ]
+      }
+    },
+    {
+      "name": "table-escaped-pipe-and-semantic-header",
+      "source": "| Назва | Ціна\\|Знижка |\n| --- | --- |\n| Візитки | 100\\|10% |",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": [
+          "<tr class=\"r-tr-head\"><th>Назва</th><th>Ціна|Знижка</th></tr>",
+          "<tr><td>Візитки</td><td>100|10%</td></tr>"
+        ]
+      }
+    },
+    {
+      "name": "unclosed-hidden-block-warns-in-edit",
+      "source": "/* not closed",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": ["Блок /* открыт в строке 1 и не закрыт — всё ниже скрыто"],
+        "diagnosticsInclude": [{ "code": "unclosed_hidden_block", "line": 0 }]
+      }
+    },
+    {
+      "name": "unclosed-hidden-block-silent-in-export",
+      "source": "/* not closed",
+      "mode": "export",
+      "expect": {
+        "htmlExcludes": ["не закрыт"],
+        "diagnosticsInclude": [{ "code": "unclosed_hidden_block", "line": 0 }]
+      }
+    },
+    {
+      "name": "unknown-variable-left-untouched",
+      "source": "[nope] грн",
+      "mode": "edit",
+      "expect": { "total": 0, "positions": 0, "htmlIncludes": ["[nope] грн"] }
+    },
+    {
+      "name": "diagnostics-template-placeholder-qty-and-price",
+      "source": "- Тираж: — шт\nЦена = 0 грн",
+      "mode": "edit",
+      "expect": {
+        "diagnosticsInclude": [
+          { "code": "template_placeholder", "line": 0 },
+          { "code": "template_placeholder", "line": 1 }
+        ]
+      }
+    },
+    {
+      "name": "diagnostics-empty-product-name",
+      "source": "[ ] :",
+      "mode": "edit",
+      "expect": { "diagnosticsInclude": [{ "code": "template_placeholder", "line": 0 }] }
+    }
+  ]
+}

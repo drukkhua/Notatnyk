@@ -1,4 +1,4 @@
-import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines } from './parser.js';
+import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines, escAttr } from './parser.js';
 import { I18N, LANGS } from './i18n.js';
 
 // --- fs через глобальный Tauri API (withGlobalTauri) ---
@@ -776,7 +776,7 @@ function buildSyntax(){
     { ico:'head',    line:'# ',  cls:'head', on:/^#{1,3}\s/, w:'# / ## / ###', g:t('sHead'),
       menu:[['H1','# '],['H2','## '],['H3','### ']] },
     { ico:'list',    line:'- ',  cls:'list', on:/^[-*]\s/,   w:'- / *',        g:t('sList') },
-    { ico:'listNum', line:'1. ', cls:'list', on:/^\d+\.\s/,  w:'1.',           g:t('sNum') },
+    { ico:'listNum', line:'1. ', cls:'list', on:/^\d+(?:\.\d+)*\.?\s/,  w:'1.',           g:t('sNum') },
     { ico:'check',   line:'[ ] ', cls:'list', on:/^\[[ xX]\]\s/, w:'[ ] / [x]', g:t('sCheck', { done: LOCALE.done }) },
     { ico:'quote',   line:'> ',  cls:'quote', on:/^>\s?/, w:`> … / > @${LOCALE.client}`, g:t('sQuote') },
     { ico:'table',   table:true,    w:'| A | B |',    g:t('sTable') },
@@ -975,11 +975,14 @@ function wrapSelection(mark, ph){
 // Классы строчных маркеров: маркер того же класса заменяется новым (- → 1., # → ##)
 const LINE_CLS = {
   head:    /^#{1,3}\s+/,
-  list:    /^(?:[-*]\s+|\d+\.\s+|\[[ xX]\]\s+)/,
+  list:    /^(?:[-*]\s+|\d+(?:\.\d+)*\.?\s+|\[[ xX]\]\s+)/,
   callout: /^!{1,2}\s+/,
   hide:    /^\/\/\s*/,
   quote:   /^>\s?/,
 };
+// Плоские номера ("1.1", "1.2.3") распознаются наравне с "1." — см. render()/RE_NUM в
+// parser.js: метка не меняется автоматически, кнопка лишь добавляет/снимает маркер.
+const RE_NUM_MARK = /^\d+(?:\.\d+)*\.?\s/;
 function prefixLines(prefix, clsName){
   const cls = LINE_CLS[clsName], v = src.value;
   const selA = src.selectionStart, selB = src.selectionEnd;
@@ -987,11 +990,11 @@ function prefixLines(prefix, clsName){
   let le = v.indexOf('\n', selB); if(le === -1) le = v.length;   // конец последней
   const lines = v.slice(ls, le).split('\n');
   const numbered = /^\d+\.\s$/.test(prefix);                     // «1. » — нумеруем по порядку
-  const hasP = l => numbered ? /^\d+\.\s/.test(l) : l.startsWith(prefix);
+  const hasP = l => numbered ? RE_NUM_MARK.test(l) : l.startsWith(prefix);
   const body = lines.filter(l => l.trim() !== '');
   let n = 1, out;
   if(body.length && body.every(hasP)){                           // все уже с маркером — снять
-    out = lines.map(l => hasP(l) ? l.replace(numbered ? /^\d+\.\s/ : prefix, '') : l);
+    out = lines.map(l => hasP(l) ? l.replace(numbered ? RE_NUM_MARK : prefix, '') : l);
   }else{
     out = lines.map(l => {
       if(l.trim() === '' && lines.length > 1) return l;          // пустые внутри — пропускаем
@@ -1178,15 +1181,22 @@ async function exportNote(){
 
   // «Принять» v1 (офлайн-lite): предзаполненный mailto, привязанный к #hash.
   // Без [email] откроется композер без адресата — клиент подставит сам.
+  // encodeURIComponent на email — не только декор: без него «&»/«?»/переносы строк
+  // в [email] могли бы дописать в mailto лишние заголовки (напр. bcc=…) или, встретив
+  // кавычку, выйти из атрибута href="…" (та же защита, что и для автоссылок — esc()
+  // сам по себе кавычки не трогает).
+  const emailSafe = typeof pay.email === 'string' ? pay.email.trim() : '';
   const subj = encodeURIComponent(t('acceptSubj', { t: title, h: hash }));
   const body = encodeURIComponent(
     t('acceptBody', { t: title, d: dateStr(true), h: hash })
     + (depositTxt ? `\n${t('acceptDeposit', { x: depositTxt })}` : ''));
-  const mailto = `mailto:${pay.email || ''}?subject=${subj}&body=${body}`;
+  const mailto = `mailto:${encodeURIComponent(emailSafe)}?subject=${subj}&body=${body}`;
   const acceptLabel = depositTxt ? t('acceptBtnDep', { x: depositTxt }) : t('acceptBtn');
+  // pay.url уже проверен на протокол http(s) в parser.js (safeHttpUrl) — здесь остаётся
+  // экранировать значение атрибута (кавычки, «&» в query) через escAttr, а не escapeHtml.
   const actions = `<div class="exp-actions">
-  <a class="exp-accept" href="${mailto}">${acceptLabel}</a>
-  ${pay.url ? `<a class="exp-pay" href="${escapeHtml(pay.url)}" target="_blank" rel="noopener">${t('payBtn')}${depositTxt ? ` · ${depositTxt}` : ''}</a>` : ''}
+  <a class="exp-accept" href="${escAttr(mailto)}">${acceptLabel}</a>
+  ${pay.url ? `<a class="exp-pay" href="${escAttr(pay.url)}" target="_blank" rel="noopener">${t('payBtn')}${depositTxt ? ` · ${depositTxt}` : ''}</a>` : ''}
 </div>`;
 
   // Инлайним в клиентский .html только CSS, влияющий на РЕНДЕР сметы: токены,

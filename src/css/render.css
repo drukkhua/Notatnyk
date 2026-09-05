@@ -54,8 +54,9 @@
 .r-hr{border:0;border-top:1px solid var(--sep);margin:12px 0;}
 .r-hr2{border:0;border-top:2px solid var(--line-2);margin:6px 0;}
 .r-table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px;}
-.r-table td{border:1px solid var(--line);padding:7px 10px;vertical-align:top;color:var(--ink);}
-.r-tr-head td{background:var(--paper-2);color:var(--ink);font-weight:700;
+.r-table td,.r-table th{border:1px solid var(--line);padding:7px 10px;vertical-align:top;
+  color:var(--ink);text-align:left;font-weight:400;}
+.r-tr-head td,.r-tr-head th{background:var(--paper-2);color:var(--ink);font-weight:700;
   font-size:12px;text-transform:uppercase;letter-spacing:.03em;border-color:var(--line-2);}
 .rendered strong{font-weight:800;color:var(--ink);}
 .rendered em{font-style:italic;}
