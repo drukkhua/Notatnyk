@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "syntaxVersion": "1.2.0",
+    "syntaxVersion": "1.2.1",
     "note": "Contract-fixtures для движка ТЗ (render()/inline() в src/parser.js и src/lib/specEngine.ts). Копия этого файла должна быть идентична в notatnyk-tauri/test/spec-fixtures.json и BitrixUI/frontend/src/lib/__tests__/spec-fixtures.json — при изменении грамматики обновляй оба файла и SPEC_SYNTAX_VERSION в обоих движках (см. docs/print-spec-parser-render-audit.md, раздел 5)."
   },
   "cases": [
@@ -31,6 +31,18 @@
       "source": "Итого: 1 250,75 грн",
       "mode": "edit",
       "expect": { "sections": [{ "declared": 1250.75, "sum": 0 }] }
+    },
+    {
+      "name": "total-russian-and-ukrainian-aliases-in-one-document",
+      "source": "= 100 грн\nИтого: 100 грн\n= 200 грн\nРазом: 200 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 300,
+        "declared": 300,
+        "positions": 2,
+        "sections": [{ "declared": 100, "sum": 100 }, { "declared": 200, "sum": 200 }],
+        "htmlIncludes": ["<b>Итого:</b>", "<b>Разом:</b>"]
+      }
     },
     {
       "name": "multiple-products-sum-not-alternatives",

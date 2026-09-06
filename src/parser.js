@@ -14,7 +14,7 @@ export function escAttr(s){
 // Версия синтаксиса ТЗ (грамматика render()/inline()). Увеличивать при любом изменении
 // разбора; должна совпадать с BitrixUI (src/lib/specEngine.ts) и с contract-fixtures
 // (test/spec-fixtures.json) — иначе порты незаметно разойдутся.
-export const SPEC_SYNTAX_VERSION = '1.2.0';
+export const SPEC_SYNTAX_VERSION = '1.2.1';
 
 // Иконки — инлайн-SVG из набора Lucide (MIT, lucide.dev). Без зависимостей:
 // вшиты только нужные пути (~0.3 КБ каждая), красятся через currentColor.
@@ -88,7 +88,10 @@ let RE = {};
 function buildPatterns(){
   const cur  = escRe(LOCALE.currency || 'грн');
   const unit = escRe(LOCALE.unit || 'шт');
-  const tot  = escRe(LOCALE.total || 'Итого');
+  // «Итого» и «Разом» — постоянные RU/UK-алиасы независимо от языка интерфейса.
+  // Пользовательские/EN-настройки LOCALE.total продолжают работать третьим вариантом.
+  const tot = `(?:${[...new Set([LOCALE.total || 'Итого', 'Итого', 'Разом'])]
+    .map(x => escRe(String(x).trim())).join('|')})`;
   const uSfx = `(\\.?\\s*\\/\\s*${unit}\\.?)`;                 // «/шт», «./шт.»
   // Цена «в Σ»: перед числом может стоять «=» ИЛИ «:» — оба дают тот же результат
   // (сумма идёт в Σ). Калькулятор формул (RE.calc) — только «=», не трогаем.
