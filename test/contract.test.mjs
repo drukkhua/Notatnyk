@@ -46,5 +46,11 @@ for (const c of cases) {
       const found = diagnostics.some((d) => d.code === want.code && (want.line == null || d.line === want.line));
       assert.ok(found, `expected diagnostics to include ${JSON.stringify(want)}\n--- diagnostics ---\n${JSON.stringify(diagnostics)}`);
     }
+    for (const unwanted of e.diagnosticsExclude || []) {
+      const found = diagnostics.some((d) => d.code === unwanted.code && (unwanted.line == null || d.line === unwanted.line));
+      assert.ok(!found, `expected diagnostics to NOT include ${JSON.stringify(unwanted)}\n--- diagnostics ---\n${JSON.stringify(diagnostics)}`);
+    }
+    if (e.diagnosticsCount != null)
+      assert.equal(diagnostics.length, e.diagnosticsCount, `diagnostics count: ${diagnostics.length} !== ${e.diagnosticsCount}\n--- diagnostics ---\n${JSON.stringify(diagnostics)}`);
   });
 }

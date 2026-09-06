@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "syntaxVersion": "1.1.0",
+    "syntaxVersion": "1.2.0",
     "note": "Contract-fixtures для движка ТЗ (render()/inline() в src/parser.js и src/lib/specEngine.ts). Копия этого файла должна быть идентична в notatnyk-tauri/test/spec-fixtures.json и BitrixUI/frontend/src/lib/__tests__/spec-fixtures.json — при изменении грамматики обновляй оба файла и SPEC_SYNTAX_VERSION в обоих движках (см. docs/print-spec-parser-render-audit.md, раздел 5)."
   },
   "cases": [
@@ -133,6 +133,117 @@
       "source": "[ ] :",
       "mode": "edit",
       "expect": { "diagnosticsInclude": [{ "code": "template_placeholder", "line": 0 }] }
+    },
+    {
+      "name": "quantity-same-unit-addition",
+      "source": "50 шт + 50 шт =",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "htmlIncludes": ["<span class=\"calc-formula\">50 шт + 50 шт</span>", "<span class=\"calc-res\">100 шт</span>"]
+      }
+    },
+    {
+      "name": "quantity-currency-formula-sums-once",
+      "source": "3720 грн - 10% =",
+      "mode": "edit",
+      "expect": { "total": 3348, "positions": 0, "htmlIncludes": ["<span class=\"price-sum\">3 348,00 грн</span>"] }
+    },
+    {
+      "name": "quantity-terminal-drives-total-line",
+      "source": "= 3348 грн\nИтого: 3720 грн - 10% =",
+      "mode": "edit",
+      "expect": {
+        "declared": 3348,
+        "sections": [{ "declared": 3348, "sum": 3348 }],
+        "htmlIncludes": ["<span class=\"r-total-ok\">✓</span>"]
+      }
+    },
+    {
+      "name": "quantity-area-unit-not-mistaken-for-percent",
+      "source": "50 м2 + 10% =",
+      "mode": "edit",
+      "expect": { "htmlIncludes": ["55 м2"], "htmlExcludes": ["2,2", "<span class=\"calc-res\">2,2</span>"] }
+    },
+    {
+      "name": "quantity-arbitrary-unit-fractional-result",
+      "source": "5 автомобилей - 10% =",
+      "mode": "edit",
+      "expect": { "htmlIncludes": ["<span class=\"calc-res\">4,5 автомобилей</span>"] }
+    },
+    {
+      "name": "quantity-unit-with-plus-modifier",
+      "source": "100 A3+ - 10% =",
+      "mode": "edit",
+      "expect": { "htmlIncludes": ["<span class=\"calc-res\">90 A3+</span>"] }
+    },
+    {
+      "name": "quantity-per-unit-currency-excluded-from-sum",
+      "source": "10 грн/шт - 10% =",
+      "mode": "edit",
+      "expect": { "total": 0, "htmlIncludes": ["<span class=\"calc-res\">9 грн/шт</span>"] }
+    },
+    {
+      "name": "quantity-unit-mismatch-preserves-text",
+      "source": "50 шт + 2 кг =",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "htmlIncludes": ["50 шт + 2 кг ="],
+        "htmlExcludes": ["calc-res"],
+        "diagnosticsInclude": [{ "code": "quantity_unit_mismatch", "line": 0 }]
+      }
+    },
+    {
+      "name": "quantity-inside-backticks-not-evaluated",
+      "source": "`50 шт + 50 шт =` пример синтаксиса",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "htmlIncludes": ["<code>50 шт + 50 шт =</code>"],
+        "htmlExcludes": ["calc-res", "calc-formula"],
+        "diagnosticsExclude": [{ "code": "quantity_syntax_error" }]
+      }
+    },
+    {
+      "name": "quantity-unfinished-line-no-diagnostic",
+      "source": "50 шт + 50 шт",
+      "mode": "edit",
+      "expect": { "diagnosticsCount": 0 }
+    },
+    {
+      "name": "quantity-unknown-numeric-variable",
+      "source": "[остаток] шт + 2 шт =",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": ["[остаток] шт + 2 шт ="],
+        "diagnosticsInclude": [{ "code": "quantity_unknown_variable", "line": 0 }]
+      }
+    },
+    {
+      "name": "quantity-client-mode-hides-formula",
+      "source": "3720 грн - 10% =",
+      "mode": "export",
+      "expect": {
+        "total": 3348,
+        "htmlIncludes": ["<span class=\"price-sum\">3 348,00 грн</span>"],
+        "htmlExcludes": ["calc-formula", "3720"]
+      }
+    },
+    {
+      "name": "quantity-old-scalar-format-with-trailing-currency-unchanged",
+      "source": "3720 - 10% = грн",
+      "mode": "edit",
+      "expect": { "total": 3348, "htmlIncludes": ["<span class=\"price-sum\">3 348 грн</span>"] }
+    },
+    {
+      "name": "quantity-html-in-unit-is-escaped",
+      "source": "5 <b>шт + 2 <b>шт =",
+      "mode": "edit",
+      "expect": {
+        "htmlIncludes": ["<span class=\"calc-res\">7 &lt;b&gt;шт</span>"],
+        "htmlExcludes": ["<b>шт"]
+      }
     }
   ]
 }

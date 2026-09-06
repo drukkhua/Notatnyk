@@ -1,5 +1,7 @@
 // Движок синтаксиса Notatnyk. Чистая логика, одинаковая на всех платформах.
 
+import { parseQuantityExpression, normalizeUnitKey, formatQuantityNumber } from './quantity-calc.js';
+
 function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
 // Экранирование значения HTML-атрибута — второй рубеж после esc(): esc() не трогает
@@ -12,7 +14,7 @@ export function escAttr(s){
 // Версия синтаксиса ТЗ (грамматика render()/inline()). Увеличивать при любом изменении
 // разбора; должна совпадать с BitrixUI (src/lib/specEngine.ts) и с contract-fixtures
 // (test/spec-fixtures.json) — иначе порты незаметно разойдутся.
-export const SPEC_SYNTAX_VERSION = '1.1.0';
+export const SPEC_SYNTAX_VERSION = '1.2.0';
 
 // Иконки — инлайн-SVG из набора Lucide (MIT, lucide.dev). Без зависимостей:
 // вшиты только нужные пути (~0.3 КБ каждая), красятся через currentColor.
@@ -98,7 +100,6 @@ function buildPatterns(){
   RE.price     = new RegExp(`(\\\\)?([=:]\\s*)?([.,]?)(\\d[\\d\\s]*(?:[.,]\\d+)?)\\s*${cur}${uSfx}?${NL}`, 'gi');
   RE.calc      = new RegExp(`((?:\\[[^\\]]+\\]|[0-9])(?:\\[[^\\]]+\\]|[0-9.,()+\\-*/%^\\s])*?)\\s*=(\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.totalLine = new RegExp(`^(${tot})${NL}\\s*(:?)\\s*(.*)$`, 'i');
-  RE.declared  = new RegExp(`${tot}${NL}\\s*:?\\s*(\\d[\\d\\s]*(?:[.,]\\d+)?)`, 'gi');
   RE.posPrice  = new RegExp(`(?<!\\\\)[=:]\\s*[\\d][\\d\\s]*(?:[.,]\\d+)?\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
   RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
@@ -429,8 +430,94 @@ function buildDimCircleSVG(dRaw, unitRaw, mods) {
 
 
 
-export function inline(text){
-  let s = esc(text), sum = 0;
+// Величины ищутся на СЫРОМ тексте (план §7: до esc()/цен/calc()), но не должны
+// цеплять содержимое `inline code` и габаритных эскизов [WxHunit]/[dDunit] — эти
+// диапазоны маскируются пробелами той же длины (позиции не сдвигаются), прежде
+// чем искать typed-выражение величины.
+function maskProtectedRanges(text){
+  let masked = text.replace(/`[^`\n]+`/g, m => ' '.repeat(m.length));
+  RE_DIMBOX.lastIndex = 0;
+  masked = masked.replace(RE_DIMBOX, m => ' '.repeat(m.length));
+  RE_DIMCIRCLE.lastIndex = 0;
+  masked = masked.replace(RE_DIMCIRCLE, m => ' '.repeat(m.length));
+  return masked;
+}
+
+// «50 шт + 50 шт =», «3720 - 10% = грн» и т.п. в начале строки внешне неотличимо
+// от плоской нумерации («50 Раздел…») — обе начинаются с «<число> ». Разруливаем
+// эвристикой: если ведущее число — на самом деле первый операнд формулы/цены,
+// а не подпись раздела, это не нумерация. Величина: typed-выражение находится и
+// начинается ровно с позиции 0. Старый calc()/цена: от начала строки до «=» нет
+// ничего, кроме цифр/операторов/[ссылок] — раздел так не называют.
+function looksLikeFormulaNotLabel(t){
+  if(!t.includes('=')) return false;
+  const resolveVar = name => (Object.prototype.hasOwnProperty.call(VARS, name) ? VARS[name] : null);
+  const qty = parseQuantityExpression(maskProtectedRanges(t), resolveVar);
+  if(qty && qty.start === 0) return true;
+  return /^(?:\[[^\]]+\]|[0-9.,()+\-*/%^\s])+=/.test(t);
+}
+
+// Сообщение диагностики калькулятора величин (план §10).
+function qtyDiagnosticMessage(code, info){
+  info = info || {};
+  switch(code){
+    case 'quantity_unit_mismatch':
+      return `Нельзя сложить «${info.a}» и «${info.b}»`;
+    case 'quantity_invalid_operation':
+      if(info.reason === 'mul_quantities') return 'Умножение двух величин пока не поддерживается';
+      if(info.reason === 'div_quantities') return 'Деление величины на величину пока не поддерживается';
+      return 'Эта операция с величинами пока не поддерживается';
+    case 'quantity_division_by_zero':
+      return 'Деление на ноль';
+    case 'quantity_unknown_variable':
+      return `Неизвестная переменная «${info.name}»`;
+    case 'quantity_syntax_error':
+    default:
+      return 'Не удалось завершить вычисление';
+  }
+}
+
+// inline(text, opts) — opts.context: 'body' (по умолчанию) | 'total' (строка «Итого»,
+// см. план §8: результат typed-выражения там не входит в sectionSum и наружу отдаётся
+// через terminalQuantity, а не через sum).
+export function inline(text, opts){
+  const context = (opts && opts.context) || 'body';
+  let sum = 0, terminalQuantity = null, qtyDiagnostic = null, qtyChunk = null;
+
+  // Калькулятор величин — выполняется РАНЬШЕ esc()/цен/calc() (план §7): иначе
+  // «3720 грн» превратится в HTML цены раньше вычисления, а «2» из «м2» — в начало
+  // старой формулы. Placeholder без цифр (\x00Q\x00) — не ловится ни одной regex
+  // ниже (включая bare-digit restore габаритов/кода) и восстанавливается последним.
+  if(text.includes('=')){
+    const masked = maskProtectedRanges(text);
+    const resolveVar = name => (Object.prototype.hasOwnProperty.call(VARS, name) ? VARS[name] : null);
+    const res = parseQuantityExpression(masked, resolveVar);
+    if(res){
+      if(res.ok){
+        terminalQuantity = res.value;
+        const isCurrency = res.value.kind === 'quantity'
+          && res.value.unitKey === normalizeUnitKey(LOCALE.currency);
+        if(isCurrency && context === 'body')
+          sum += Math.round((res.value.value + Number.EPSILON) * 100) / 100;
+        const numStr = formatQuantityNumber(res.value.value, isCurrency);
+        const unitTail = res.value.kind === 'quantity' ? ' ' + esc(res.value.unitRaw) : '';
+        const resultClass = isCurrency ? 'price-sum' : 'calc-res';
+        const resultHtml = isCurrency
+          ? `<span class="${resultClass}">${numStr} ${esc(LOCALE.currency)}</span>`
+          : `<span class="${resultClass}">${numStr}${unitTail}</span>`;
+        const formulaSrc = text.slice(res.start, res.end).replace(/\s*=\s*$/, '').trim();
+        qtyChunk = EXPORT ? resultHtml
+          : `<span class="calc-formula">${refsToHtml(esc(formulaSrc))}</span>`
+            + ` <span class="calc-eq">=</span> ${resultHtml}`;
+      } else {
+        qtyDiagnostic = { code: res.code, info: res.info };
+        qtyChunk = esc(text.slice(res.start, res.end));
+      }
+      text = text.slice(0, res.start) + '\x00Q\x00' + text.slice(res.end);
+    }
+  }
+
+  let s = esc(text);
 
   // Инлайн-код `…`: вырезаем ПЕРВЫМ и возвращаем ПОСЛЕДНИМ. Содержимое дословно —
   // его не трогают ни деньги/формулы, ни **/*/==/~~ и авто-ссылки (как backtick-код
@@ -579,7 +666,9 @@ export function inline(text){
   // Возврат инлайн-кода: моноширинный чип в рамке (стили — .rendered code).
   s = s.replace(/(\d+)/g, (m, i) => `<code>${codes[+i]}</code>`);
 
-  return { html: s, sum };
+  if(qtyChunk != null) s = s.replace('\x00Q\x00', qtyChunk);
+
+  return { html: s, sum, terminalQuantity, qtyDiagnostic };
 }
 
 // Текст заголовка без инлайн-разметки — для свёрнутой шапки секции и ключа фолда.
@@ -645,6 +734,15 @@ export function render(text, opts){
     blocks.push({ html, line: curLine, kind: kind || '', level: 0, sum: 0, done: 0,
       checks: 0, rows: 0, declared: null, title: '', titleHtml: '', count: 0, ...(meta || {}) });
   };
+  // Обёртка над inline(): если найдена (но не вычислена) величина — превращает
+  // её код ошибки в диагностику с номером текущей строки (план §10).
+  const inlineAt = (t, opts) => {
+    const r = inline(t, opts);
+    if(r.qtyDiagnostic && !hidden)
+      diagnostics.push({ code: r.qtyDiagnostic.code, severity: 'warning', line: curLine,
+        message: qtyDiagnosticMessage(r.qtyDiagnostic.code, r.qtyDiagnostic.info) });
+    return r;
+  };
 
   // строка таблицы: начинается и кончается «|» и содержит хотя бы 2 «|»
   const isTableRow = t => t.startsWith('|') && t.endsWith('|') && (t.match(/\|/g)||[]).length >= 2;
@@ -684,7 +782,7 @@ export function render(text, opts){
            + '<span class="r-hidden-eye" aria-hidden="true">🙈</span>'
            + `<span class="r-hidden-label">${esc(LOCALE.internal || 'внутренние расчёты')}</span>`
            + `<span class="r-hidden-n">(${body.length})</span></summary>`
-           + `<div class="r-hidden-body">${body.map(l => inline(l).html).join('<br>')}</div></details>`,
+           + `<div class="r-hidden-body">${body.map(l => inlineAt(l).html).join('<br>')}</div></details>`,
           'hidden', { count: body.length });
       }
       continue;
@@ -719,7 +817,7 @@ export function render(text, opts){
           const cells = splitTableRow(rowLine.slice(1, -1));
           const cellTag = ri === 0 ? 'th' : 'td';
           tb += ri === 0 ? '<tr class="r-tr-head">' : '<tr>';
-          for(const c of cells){ const r = inline(c); add(r.sum); tsum += r.sum; tb += `<${cellTag}>${r.html}</${cellTag}>`; }
+          for(const c of cells){ const r = inlineAt(c); add(r.sum); tsum += r.sum; tb += `<${cellTag}>${r.html}</${cellTag}>`; }
           tb += '</tr>';
         });
         emit(tb + '</table>', 'table', { rows: Math.max(0, rows.length - 1), sum: tsum });
@@ -741,7 +839,7 @@ export function render(text, opts){
         const body = tj.replace(/^>\s?/, '');
         const cm = body.match(/^@\s*(.+)$/);
         if(cm) client = cm[1].trim();            // «> @Имя» — клиент
-        else if(body !== '') qlines.push(inline(body).html);  // формат есть, в Σ не идёт
+        else if(body !== '') qlines.push(inlineAt(body).html);  // формат есть, в Σ не идёт
         j++;
       }
       let card = `<blockquote class="r-quote"><span class="r-quote-ico">${ICO.quote}</span>`;
@@ -800,14 +898,14 @@ export function render(text, opts){
       // не валидное объявление — падаем в обычную обработку ниже
     }
     if(m = t.match(/^(#{1,3})\s+(.*)$/)){
-      const r = inline(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum);
       emit(`<div class="r-h${m[1].length}">${r.html}</div>`, `h${m[1].length}`,
         { level: m[1].length, title: stripInline(m[2]), titleHtml: r.html, sum: r.sum }); continue;
     }
     if(m = t.match(/^\[([ xX])\]\s*(.*)$/)){
       const done = m[1].toLowerCase() === 'x';
       checksTotal++; if(done) checksDone++;
-      const r = inline(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum);
       const idx = checkLineMap.length; checkLineMap.push(lineIdx);
       const label = m[2].trim();
       if(/:$/.test(label) && label.replace(/:$/, '').trim() === '')
@@ -821,7 +919,7 @@ export function render(text, opts){
       continue;
     }
     if(m = t.match(/^(!!?)\s+(.*)$/)){
-      const r = inline(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum);
       const strong = m[1] === '!!';
       emit(`<div class="r-callout${strong?' strong':''}">`
             + `<span class="r-callout-ico">${strong?ICO.danger:ICO.warn}</span>`
@@ -829,11 +927,15 @@ export function render(text, opts){
     }
     if(m = t.match(RE.totalLine)){
       const rest = m[3];
-      const r = inline(rest);                  // текст суммы (обычно без «=», в total не идёт)
+      // context:'total' — typed-выражение величины здесь не идёт в sectionSum (план §8);
+      // его результат достаётся из terminalQuantity, а не из r.sum.
+      const r = inlineAt(rest, { context: 'total' });
+      const tq = r.terminalQuantity;
+      const tqIsCurrency = tq && tq.kind === 'quantity' && tq.unitKey === normalizeUnitKey(LOCALE.currency);
       // Дробная часть («10,50»/«10.50») тоже входит в сумму — иначе «Итого: 10,50 грн»
       // читалось бы как «10» и давало ложное расхождение с суммой позиций/сделки.
       const dm = rest.match(/\d[\d\s]*(?:[.,]\d+)?/);
-      const declaredHere = dm ? parseMoney(dm[0]) : null;
+      const declaredHere = tqIsCurrency ? tq.value : (dm ? parseMoney(dm[0]) : null);
       const sec = Math.round(sectionSum * 100) / 100;
       let fb;
       if(declaredHere != null){
@@ -861,17 +963,19 @@ export function render(text, opts){
     // Плоская нумерация: "1.", "1.1", "1.2.", "2.1.3" — метка не вложенность, просто
     // текст, который распознаётся и показывается ровно так, как ввёл пользователь
     // (без своей системы уровней/перенумерации — см. docs/print-spec-parser-render-audit.md).
-    if(m = t.match(/^(\d+(?:\.\d+)*\.?)\s+(.+)$/)){
-      const r = inline(m[2]); add(r.sum);
+    // Исключение: «50 шт + 50 шт =» и т.п. — это величина, а не пункт нумерации;
+    // её ведущее число — первый операнд формулы, а не подпись раздела.
+    if((m = t.match(/^(\d+(?:\.\d+)*\.?)\s+(.+)$/)) && !looksLikeFormulaNotLabel(t)){
+      const r = inlineAt(m[2]); add(r.sum);
       const nc = hasDimboxWithText(r.html) ? 'r-num r-num-hd' : 'r-num';
       emit(`<div class="${nc}">${m[1]} ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
     if(m = t.match(/^[-*]\s+(.*)$/)){
-      const r = inline(m[1]); add(r.sum);
+      const r = inlineAt(m[1]); add(r.sum);
       const lc = hasDimboxWithText(r.html) ? 'r-li r-li-hd' : 'r-li';
       emit(`<div class="${lc}">${r.html}</div>`, 'li', { sum: r.sum }); continue;
     }
-    const r = inline(t); add(r.sum);
+    const r = inlineAt(t); add(r.sum);
     const ph = perUnitExpand(r.html, lastTotal);
     // обычный текст — без маркера списка; [кільк.] раскрывается по ближайшему «Итого»
     const pc = hasDimboxWithText(ph) ? 'r-p r-p-hd' : 'r-p';
@@ -890,12 +994,13 @@ export function render(text, opts){
   }
   const html = blocks.map(b => b.html).join('');
 
-  // объявленные "Итого" (может быть несколько секций) — суммируем все
+  // объявленные "Итого" (может быть несколько секций) — суммируем все. Берём уже
+  // посчитанные sections[].declared (а не заново парсим текст регуляркой): для
+  // строки с величиной declaredHere приходит из terminalQuantity, а не из первого
+  // попавшегося числа после «Итого:» — иначе здесь снова читалось бы «3720», а не «3348».
   let declared = null, declaredSum = 0, hasDeclared = false;
-  RE.declared.lastIndex = 0;
-  for(const mm of text.matchAll(RE.declared)){
-    declaredSum += parseMoney(mm[1]);
-    hasDeclared = true;
+  for(const sec of sections){
+    if(sec.declared != null){ declaredSum += sec.declared; hasDeclared = true; }
   }
   if(hasDeclared) declared = declaredSum;
 
@@ -1016,7 +1121,23 @@ const edSyn = s => `<span class="ed-syn">${esc(s)}</span>`;
 // Инлайн для редактора: маркеры сохраняем (серым), внутренний текст оформляем,
 // всё дословно (textContent == исходная строка).
 function inlineSource(text){
-  let s = esc(text);
+  // Величина с единицей — подсвечивается как ОДИН синтаксический фрагмент (план §9),
+  // но источник не меняется и результат в строку не подставляется: тот же safe
+  // placeholder-приём, что и в inline(), избавляет от былой ошибочной подсветки
+  // «2 + 10%» внутри «50 м2 + 10% =» (RE.price такое видел раньше границы юнита).
+  let qtyRaw = null, qtyCounted = false, workText = text;
+  {
+    const masked = maskProtectedRanges(text);
+    const resolveVar = name => (Object.prototype.hasOwnProperty.call(VARS, name) ? VARS[name] : null);
+    const res = parseQuantityExpression(masked, resolveVar);
+    if(res){
+      qtyRaw = text.slice(res.start, res.end);
+      qtyCounted = !!(res.ok && res.value.kind === 'quantity'
+        && res.value.unitKey === normalizeUnitKey(LOCALE.currency));
+      workText = text.slice(0, res.start) + '\x00Q\x00' + text.slice(res.end);
+    }
+  }
+  let s = esc(workText);
   // инлайн-код `…`: содержимое вырезаем (плейсхолдер), маркеры-кавычки покажем серым,
   // тело — как <code>. textContent строки при этом остаётся исходным (инвариант И1).
   const codes = [];
@@ -1034,6 +1155,8 @@ function inlineSource(text){
   s = s.replace(/(https?:\/\/[^\s<]+)/g, '<span class="ed-link">$1</span>');
   s = s.replace(/(\d+)/g, (m, i) =>
     edSyn('`') + `<code>${codes[+i]}</code>` + edSyn('`'));
+  if(qtyRaw != null)
+    s = s.replace('\x00Q\x00', `<span class="ed-money${qtyCounted ? ' counted' : ''}">${esc(qtyRaw)}</span>`);
   return s;
 }
 
@@ -1087,7 +1210,7 @@ export function renderSourceLines(text){
       out += `<div ${dl} class="ed-line r-total"><b>${esc(m[1])}${m[2] || ''}</b> ${inlineSource(m[3])}</div>`;
       continue;
     }
-    if(m = t.match(/^(\d+(?:\.\d+)*\.?)(\s+)(.*)$/)){
+    if((m = t.match(/^(\d+(?:\.\d+)*\.?)(\s+)(.*)$/)) && !looksLikeFormulaNotLabel(t)){
       out += `<div ${dl} class="ed-line r-num">${esc(m[1] + m[2])}${inlineSource(m[3])}</div>`;
       continue;
     }

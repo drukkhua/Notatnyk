@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "note": "Чистые fixtures калькулятора величин — прогоняются напрямую через parseQuantityExpression() (src/quantity-calc.js и BitrixUI/frontend/src/lib/quantityCalc.ts). Копия должна быть идентична в notatnyk-tauri/test/quantity-calc-fixtures.json и BitrixUI/frontend/src/lib/__tests__/quantity-calc-fixtures.json. Переменные заданы в поле vars (имя -> число)."
+  },
+  "cases": [
+    {
+      "name": "same-unit-addition",
+      "source": "50 шт + 50 шт =",
+      "expect": { "ok": true, "kind": "quantity", "value": 100, "unitRaw": "шт" }
+    },
+    {
+      "name": "same-unit-subtraction-area",
+      "source": "100 м2 - 25 м2 =",
+      "expect": { "ok": true, "kind": "quantity", "value": 75, "unitRaw": "м2" }
+    },
+    {
+      "name": "currency-minus-percent",
+      "source": "3720 грн - 10% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 3348, "unitRaw": "грн" }
+    },
+    {
+      "name": "percent-chain-from-accumulated-value",
+      "source": "100 шт - 10% + 20% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 108, "unitRaw": "шт" }
+    },
+    {
+      "name": "quantity-times-scalar",
+      "source": "50 шт * 2 =",
+      "expect": { "ok": true, "kind": "quantity", "value": 100, "unitRaw": "шт" }
+    },
+    {
+      "name": "scalar-times-quantity",
+      "source": "2 * 50 шт =",
+      "expect": { "ok": true, "kind": "quantity", "value": 100, "unitRaw": "шт" }
+    },
+    {
+      "name": "quantity-div-scalar",
+      "source": "100 шт / 4 =",
+      "expect": { "ok": true, "kind": "quantity", "value": 25, "unitRaw": "шт" }
+    },
+    {
+      "name": "quantity-times-percent",
+      "source": "200 шт * 50% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 100, "unitRaw": "шт" }
+    },
+    {
+      "name": "fractional-result-arbitrary-unit",
+      "source": "5 автомобилей - 10% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 4.5, "unitRaw": "автомобилей" }
+    },
+    {
+      "name": "unit-with-plus-and-spaced-minus-operator",
+      "source": "100 A3+ - 10% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 90, "unitRaw": "A3+" }
+    },
+    {
+      "name": "unit-with-slash",
+      "source": "10 грн/шт - 10% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 9, "unitRaw": "грн/шт" }
+    },
+    {
+      "name": "text-prefix-before-expression",
+      "source": "Скидка: 3720 грн - 10% =",
+      "expect": { "ok": true, "kind": "quantity", "value": 3348, "unitRaw": "грн" }
+    },
+    {
+      "name": "known-numeric-variable-with-unit",
+      "source": "[тираж] шт + 50 шт =",
+      "vars": { "тираж": 100 },
+      "expect": { "ok": true, "kind": "quantity", "value": 150, "unitRaw": "шт" }
+    },
+    {
+      "name": "unit-mismatch",
+      "source": "50 шт + 2 кг =",
+      "expect": { "ok": false, "code": "quantity_unit_mismatch" }
+    },
+    {
+      "name": "invalid-multiply-two-quantities",
+      "source": "2 м * 3 м =",
+      "expect": { "ok": false, "code": "quantity_invalid_operation" }
+    },
+    {
+      "name": "invalid-add-quantity-and-bare-number",
+      "source": "50 шт + 2 =",
+      "expect": { "ok": false, "code": "quantity_invalid_operation" }
+    },
+    {
+      "name": "division-by-zero",
+      "source": "50 шт / 0 =",
+      "expect": { "ok": false, "code": "quantity_division_by_zero" }
+    },
+    {
+      "name": "unknown-variable-with-unit",
+      "source": "[остаток] шт + 2 шт =",
+      "expect": { "ok": false, "code": "quantity_unknown_variable" }
+    },
+    {
+      "name": "syntax-error-trailing-operator",
+      "source": "50 шт + =",
+      "expect": { "ok": false, "code": "quantity_syntax_error" }
+    },
+    {
+      "name": "plain-scalar-declines-to-old-calc",
+      "source": "3720 - 10% =",
+      "expect": { "null": true }
+    },
+    {
+      "name": "compact-no-space-declines",
+      "source": "50 шт+50 шт =",
+      "expect": { "null": true }
+    },
+    {
+      "name": "no-trailing-equals-declines",
+      "source": "50 шт + 50 шт",
+      "expect": { "null": true }
+    },
+    {
+      "name": "old-format-scalar-with-trailing-currency-word-declines",
+      "source": "3720 - 10% = грн",
+      "expect": { "null": true }
+    }
+  ]
+}
