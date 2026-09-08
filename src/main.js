@@ -1,4 +1,4 @@
-import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines, escAttr } from './parser.js';
+import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines, wrapParamRuns, escAttr } from './parser.js';
 import { I18N, LANGS } from './i18n.js';
 
 // --- fs через глобальный Tauri API (withGlobalTauri) ---
@@ -291,12 +291,34 @@ function sectionSummaryText(roll){
   return parts.join(' · ');
 }
 
-// Дерево узлов → HTML. Подряд идущие блоки — как есть (сохраняем делегирование
-// кликов и data-line); секция — обёртка с кликабельной шапкой и (если не свёрнута) телом.
-function renderNodesHtml(nodes){
-  let h = '';
+// Дерево узлов → HTML. Подряд идущие блоки склеиваются и прогоняются через
+// wrapParamRuns() (параметры «- Ключ: Значення» → <dl class="spec-param-list">),
+// делегирование кликов и data-line сохраняются; секция — обёртка с кликабельной
+// шапкой и (если не свёрнута) телом.
+function renderNodesHtml(nodes){ return renderNodeList(nodes, false); }
+
+// twoCol=true — тело секции-изделия: если среди прямых детей есть блок с эскизом
+// (<figure class="r-dim-figure">), раскладываем «параметры/текст | эскиз в <aside>»
+// (порт renderProductNodes() из BitrixUI SpecChecklist.tsx). На верхнем уровне
+// (twoCol=false) — только группировка параметров, без карточки.
+function renderNodeList(nodes, twoCol){
+  if(twoCol){
+    const isSketch = n => n.block && n.block.html.includes('r-dim-figure');
+    if(nodes.some(isSketch)){
+      const copy = nodes.filter(n => !isSketch(n));
+      const sketch = nodes.filter(isSketch);
+      return '<div class="spec-product-layout">'
+        + `<div class="spec-product-copy">${renderNodeList(copy, false)}</div>`
+        + `<aside class="spec-product-sketch" aria-label="${escAttr(t('sketchAside'))}">`
+          + `${renderNodeList(sketch, false)}</aside>`
+        + '</div>';
+    }
+  }
+  let h = '', run = '';
+  const flush = () => { if(run){ h += wrapParamRuns(run); run = ''; } };
   for(const n of nodes){
-    if(n.block){ h += n.block.html; continue; }
+    if(n.block){ run += n.block.html; continue; }
+    flush();
     const sec = n.section;
     const col = currentFolds.has(sec.key);
     h += `<section class="r-sec lvl${sec.level}${col?' collapsed':''}">`
@@ -306,9 +328,10 @@ function renderNodesHtml(nodes){
       + `<span class="r-sec-title">${sec.header.titleHtml}</span>`
       + (col ? `<span class="r-sec-sum">${sectionSummaryText(sec.roll)}</span>` : '')
       + '</div>'
-      + (col ? '' : `<div class="r-sec-body">${renderNodesHtml(sec.children)}</div>`)
+      + (col ? '' : `<div class="r-sec-body">${renderNodeList(sec.children, true)}</div>`)
       + '</section>';
   }
+  flush();
   return h;
 }
 
@@ -783,7 +806,7 @@ function buildSyntax(){
     { ico:'callout', line:'! ',  cls:'callout', on:/^!{1,2}\s/, w:'! / !!',    g:t('sCallout'),
       menu:[['!','! '],['!!','!! ']] },
     { ico:'dimBox',  ins:'[50x90мм]', sel:'50x90', w:'[50x90мм]  [50x90мм r5]  [50x90мм+3]  [210x99мм fold]',  g:t('sDimBox') },
-    { ico:'dimCirc', ins:'[d50мм]',  sel:'50',    w:'[d50мм]',    g:t('sDimCirc') },
+    { ico:'dimCirc', ins:'[d50мм]',  sel:'50',    w:'[d50мм]  [d50мм+3]',    g:t('sDimCirc') },
     { ico:'hrThin',  block:'---\n', w:'---',          g:t('sHrThin'),
       menu:[['—','---\n'],['≡','===\n']] },
     {                               w:'===',          g:t('sHrBold') },
@@ -1164,7 +1187,11 @@ body.export .r-check{cursor:default;pointer-events:none;}
 async function exportNote(){
   const n = current(); if(!n) return;
   const text = src.value;
-  const { html, stats } = render(text, { mode: 'export' });   // санитайз по построению
+  const r = render(text, { mode: 'export' });   // санитайз по построению
+  const stats = r.stats;
+  // Параметры «- Ключ: Значення» → <dl class="spec-param-list"> (грид <dt>/<dd>).
+  // Слой представления, как в renderNodesHtml() и BitrixUI SpecChecklist.tsx.
+  const html = wrapParamRuns(r.html);
   paint();  // render() с export-режимом сбросил внутренний флаг общей паинт-цепочки
   const title = titleFrom(text);
   const hash = shortHash(text);

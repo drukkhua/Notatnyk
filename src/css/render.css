@@ -4,7 +4,7 @@
    ВАЖНО: эти правила уходят и в ЭКСПОРТ (клиентский .html) — БЕЗ color-mix,
    только явные цвета (у клиента может быть старый браузер). */
 .rendered{flex:1;overflow:auto;padding:20px 24px;background:var(--paper);
-  font-size:14.5px;line-height:1.5;}
+  font-size:14.5px;line-height:1.5;container-type:inline-size;}
 .rendered>*:first-child{margin-top:0;}
 
 /* blocks */
@@ -18,8 +18,8 @@
    (SVG «наїжджав» на крапку). inline-block фіксованої ширини бере участь у
    звичайному inline-потоці — переноситься разом із текстом і завжди справа
    від float. */
-.r-li{color:var(--ink-soft);margin:3px 0;padding-left:18px;text-indent:-18px;font-size:13.5px;line-height:1.55;}
-.r-li::before{content:"•";display:inline-block;width:10px;margin-left:8px;color:var(--line-2);font-weight:700;}
+.r-li{color:var(--ink-soft);margin:3px 0;padding-left:45.5px;text-indent:-39.5px;font-size:13.5px;line-height:1.55;}
+.r-li::before{content:"•";display:inline-block;box-sizing:border-box;width:39.5px;margin-left:6px;text-align:right;padding-right:17px;color:var(--focus);font-weight:700;font-size:20.25px;line-height:1;}
 .r-p{color:var(--ink-soft);margin:3px 0;font-size:13.5px;line-height:1.55;}
 .r-check{display:flex;align-items:center;gap:9px;margin:7px 0;cursor:pointer;user-select:none;}
 .r-check .box{flex:none;width:20px;height:20px;border:2px solid var(--check);border-radius:6px;
@@ -70,17 +70,64 @@
 .rendered a{color:var(--focus);text-underline-offset:2px;word-break:break-all;}
 
 /* ── Габаритные эскизы [50x90мм] / [d50мм] ──────────────────────────────────
-   float:left — эскиз прижимается ВЛЕВО, текст обтекает справа (газетный блок).
-   BFC держит .rendered (overflow:auto) — отдельный flow-root на каждом блоке не
-   нужен и как раз мешал: каждый div создавал новый контекст и рвал обтекание.
-   clear:left гарантирует, что два эскиза подряд стекируются вертикально, а не
-   слипаются в строку. Структурные элементы сбрасывают float — текст после
-   заголовка/разделителя начинается ниже любого плавающего эскиза. */
-.r-dimbox{float:left;margin:2px 56px 12px 0;clear:left;overflow:visible;max-width:50%;}
-/* Абзац/список с эскизом И текстом: BFC изолирует float внутри блока + clear
-   сбрасывает предыдущий standalone-float перед стартом нового «газетного ряда».
-   Standalone-эскиз (только SVG, без текста) класса -hd не получает — его float
-   свободно проникает в следующий абзац, давая классическое газетное обтекание. */
+   Геометрия SVG — в src/dimensionSketch.js (общий контракт с BitrixUI); здесь
+   только покраска через токены --sketch-* (см. tokens.css) — БЕЗ color-mix,
+   правила уходят в клиентский экспорт.
+   .r-dim-figure = дословный исходник + SVG + подпись. float:left — эскиз
+   прижимается ВЛЕВО, текст обтекает справа (газетный блок). BFC держит .rendered
+   (overflow:auto). clear:left — два эскиза подряд стекируются вертикально.
+   Структурные элементы сбрасывают float. Внутри двухколоночной карточки изделия
+   (.spec-product-sketch, см. З-5) float снимается. */
+.r-dim-figure{float:left;clear:left;margin:2px 20px 12px 0;
+  max-width:min(50%,240px);padding:8px 10px 6px;
+  border:1px solid var(--line);border-radius:11px;background:var(--paper-2);}
+.r-dim-source{display:inline-block;margin-bottom:5px;padding:1px 6px;font-size:10.5px;
+  color:var(--sketch-dimension);background:var(--paper);
+  border:1px solid var(--line);border-radius:5px;}
+.r-dim-figure figcaption{margin-top:3px;font-size:10px;color:var(--ink-soft);text-align:center;}
+svg.r-dimbox{display:block;width:100%;max-width:240px;height:auto;margin:0 auto;overflow:visible;}
+.r-dimbox text{fill:var(--sketch-dimension);font:600 10px ui-sans-serif,system-ui,sans-serif;}
+.r-dimbox .sketch-shape{fill:var(--sketch-paper);stroke:var(--sketch-shape);stroke-width:2;}
+.r-dimbox .sketch-bleed{fill:none;stroke:var(--sketch-bleed);stroke-width:1.25;stroke-dasharray:4 4;}
+.r-dimbox .sketch-dimension{fill:none;stroke:var(--sketch-dimension);stroke-width:1.15;}
+.r-dimbox .sketch-helper{fill:none;stroke:var(--sketch-helper);stroke-width:1;}
+.r-dimbox .sketch-arrow{fill:var(--sketch-dimension);}
+.r-dimbox .sketch-cross{fill:none;stroke:var(--sketch-cross);stroke-width:.75;stroke-dasharray:4 3;}
+.r-dimbox .sketch-fold{fill:none;stroke:var(--sketch-fold);stroke-width:1.3;stroke-dasharray:7 3 1 3;}
+/* «- Ключ: Значення» → грид <dt>/<dd> (после wrapParamRuns в parser.js строки
+   параметров подряд оборачиваются в <dl class="spec-param-list">). Гасим
+   унаследованные от .r-li висячий отступ (text-indent) и маркер «•» (::before) —
+   иначе фантомная колонка-буллет и вынос значения за левую границу (баг
+   BitrixUI 1a84bff). Правила уходят в экспорт — только var(), без color-mix. */
+.spec-param-list{margin:6px 0;}
+.spec-param-list > div{display:grid;grid-template-columns:minmax(84px,.4fr) minmax(0,1fr);
+  gap:10px;margin:0;padding:5px 0;text-indent:0;border-bottom:1px solid var(--line);
+  font-size:13px;line-height:1.5;}
+.spec-param-list > div::before{display:none;}
+.spec-param-list dt{min-width:0;color:var(--ink-soft);}
+.spec-param-list dd{min-width:0;margin:0;color:var(--ink);font-weight:600;overflow-wrap:anywhere;}
+.spec-param-list .strong dt,.spec-param-list .strong dd{font-weight:800;}
+.doc-mode .spec-param-list > div{font-size:0.95em;}
+
+/* Карточка изделия: параметры/текст слева, размерный эскиз в <aside> справа
+   (renderNodeList(..., true) в main.js — тело секции-изделия). На узкой ширине —
+   одна колонка. @container: .rendered — inline-size контейнер. Старый браузер
+   без @container увидит 2 колонки всегда — для печатного A4 это нормально. */
+.spec-product-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(170px,30%,210px);
+  gap:16px;align-items:start;padding-top:6px;}
+.spec-product-copy,.spec-product-sketch{min-width:0;}
+.spec-product-sketch{align-self:start;}
+/* Внутри карточки эскиз не плавает — занимает свою колонку целиком. */
+.spec-product-sketch .r-p{margin:0;}
+.spec-product-sketch .r-dim-figure{float:none;clear:none;margin:0;max-width:none;width:100%;}
+@container (max-width:520px){
+  .spec-product-layout{grid-template-columns:1fr;gap:12px;}
+  .spec-product-sketch{width:min(100%,230px);margin-inline:auto;}
+}
+
+/* Абзац/список с эскизом И текстом: BFC изолирует float + clear сбрасывает
+   предыдущий standalone-float. Standalone-эскиз (только <figure>, без текста)
+   класса -hd не получает — его float свободно обтекается следующим абзацем. */
 .r-p-hd,.r-li-hd,.r-num-hd{clear:left;display:flow-root;}
 /* Заголовки, разделители и Итого всегда начинают ниже плавающих эскизов */
 .r-h1,.r-h2,.r-h3,.r-hr,.r-hr2,.r-total{clear:both;}

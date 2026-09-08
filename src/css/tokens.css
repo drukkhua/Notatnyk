@@ -11,6 +11,12 @@
   --danger-bg:#fef2f2; --danger-line:#fbd5d5; --danger-tx:#b42318;
   --check:#2f6df0; --done:#8b93a1; --green:#28a76a; --focus:#2f6df0;
   --src-bg:#e9ecf2; --src-num:#9aa3b3;   /* фон источника темнее бумаги; номера строк */
+  /* Размерный эскиз [WxHед] (src/dimensionSketch.js). Ссылаются на базовые токены —
+     тёмная тема подхватывается сама (var() резолвится лениво). БЕЗ color-mix:
+     правила уходят в клиентский экспорт. */
+  --sketch-shape:var(--ink); --sketch-paper:var(--paper);
+  --sketch-dimension:var(--focus); --sketch-helper:var(--line-2);
+  --sketch-bleed:var(--formula); --sketch-cross:var(--formula); --sketch-fold:var(--ink-soft);
   /* ── Шкала UI (радиусы / тени / переход) — из анализа Noteriv (docs/noteriv-analysis.md).
      Тени слоями (мягкая + кольцо) дают «дорогой» вид. Только для ВНУТРЕННЕГО UI. */
   --r-1:6px; --r-2:8px; --r-3:10px; --r-4:14px;

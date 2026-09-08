@@ -1,6 +1,7 @@
 // Движок синтаксиса Notatnyk. Чистая логика, одинаковая на всех платформах.
 
 import { parseQuantityExpression, normalizeUnitKey, formatQuantityNumber } from './quantity-calc.js';
+import { renderDimensionSketch, DIM_SKETCH_I18N } from './dimensionSketch.js';
 
 function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
@@ -79,6 +80,8 @@ export const LOCALE = {
   depositVar: 'депозит',         // [депозит] = 30% | 5000 → «Принять и внести депозит»
   validVar:   'действительна до',// [действительна до] = 01.08 → штамп срока действия
   emailVar:   'email',           // [email] = адрес автора → mailto «Принять»
+  lang:       'ru',              // язык интерфейса ('ru'|'uk'|'en') — для aria-текста эскиза
+  sketchCaption: 'Эскиз построен из строки ТЗ', // <figcaption> под размерным эскизом
 };
 
 const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -236,203 +239,41 @@ export function calc(input){
 // ─────────────────────────────────────────────────────────────────────────────
 const RE_DIMBOX = /\[(\d+(?:[.,]\d+)?)\s*[xXхХ×]\s*(\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))((?:[+\s][^\]]*)?)\]/g;
 
-// Виліт [+N]: на практиці завжди 1-4мм (більше не буває). Пряме bleed*sc майже
-// не видно на типовому масштабі — формула не прив'язана до розміру ескізу:
-// кожне значення +N завжди дає однаковий, помітний і відрізнюваний піксельний
-// розмір (1мм→2px, 2мм→4px, 3мм→6px, 4мм→8px), незалежно від sc товару.
-function bleedPx(bleed){ return Math.round(bleed * 2); }
-
-function buildDimSVG(wRaw, hRaw, unitRaw, mods) {
-  const wn = parseFloat(String(wRaw).replace(',','.'));
-  const hn = parseFloat(String(hRaw).replace(',','.'));
-  if(!isFinite(wn)||!isFinite(hn)||wn<=0||hn<=0)
-    return esc('['+wRaw+'x'+hRaw+unitRaw+']');
-  const uMap={'mm':'мм','мм':'мм','cm':'см','см':'см','dm':'дм','дм':'дм','m':'м','м':'м'};
-  const uLbl = uMap[unitRaw.toLowerCase()] || unitRaw;
-  const wNum = Number.isInteger(wn) ? String(wn) : String(wRaw).replace('.',',');
-  const hNum = Number.isInteger(hn) ? String(hn) : String(hRaw).replace('.',',');
-  const wText = wNum+' '+uLbl, hText = hNum+' '+uLbl;
-
-  const MW=160, MH=130, MIN_D=50;
-  const sc = Math.min(MW/wn, MH/hn, 8);
-  const rw = Math.round(Math.max(MIN_D, Math.min(MW, wn*sc)));
-  const rh = Math.round(Math.max(MIN_D, Math.min(MH, hn*sc)));
-
-  // Parse modifiers from source: +N = bleed, rN / r=N = corner radius
-  const modsStr = String(mods||'');
-  const bleedRaw  = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
-  const radiusRaw = (modsStr.match(/\br=?(\d+(?:[.,]\d+)?)/i)||[])[1];
-  const db = bleedRaw  ? bleedPx(parseFloat(bleedRaw.replace(',','.')))  : 0;
-  const dr = radiusRaw ? Math.min(Math.round(parseFloat(radiusRaw.replace(',','.'))*sc), Math.floor(Math.min(rw,rh)/2)) : 0;
-  // Outer rect corner: slightly larger radius so both curves feel concentric
-  const drOut = dr>0 ? Math.min(dr+db, Math.floor(Math.min(rw+2*db,rh+2*db)/2)) : 0;
-  // fold — биговка: пунктирная линия посередине перпендикулярно длинной стороне
-  const hasFold = /\bfold\b/i.test(modsStr);
-
-  // Layout — inner rect inset by db; dim lines attach to inner rect edges.
-  // When db=0 everything collapses to the plain case.
-  const PL=8, PT=8, DG=8, PR=14, AL=6, AW=2.5;
-  const rx=PL+db, ry=PT+db;             // inner rect origin
-  const cx=rx+rw/2, cy=ry+rh/2;
-  const dim_y = PT+rh+2*db+DG;          // width dim line — below outer rect
-  const dlx   = PL+rw+2*db+DG;          // height dim line — right of outer rect
-  const TW=PL+rw+2*db+DG+PR;
-  const TH=PT+rh+2*db+DG+16+6;
-
-  const wGap = Math.max(4, Math.min(rw/2-AL-6, (wText.length*6.8+6)/2));
-  const hGap = Math.max(4, Math.min(rh/2-AL-6, (hText.length*6.8+6)/2));
-
-  const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
-  const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
-  const xt  = 'stroke="'+di+'" stroke-width="0.7" stroke-dasharray="4,3"';
-  const el  = 'stroke="'+dim+'" stroke-width="0.6"';
-  const dl  = 'stroke="'+dim+'" stroke-width="0.8"';
-  const aw  = 'stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
-  // Bleed rect: same dash pattern as X-cross, slightly lighter
-  const bst = 'stroke="'+di+'" fill="none" stroke-width="0.75" stroke-dasharray="5,3"';
-
-  const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW);
-  const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW);
-  const awU=(x,y)=>'M '+(x-AW)+','+(y+AL)+' L '+x+','+y+' L '+(x+AW)+','+(y+AL);
-  const awD=(x,y)=>'M '+(x-AW)+','+(y-AL)+' L '+x+','+y+' L '+(x+AW)+','+(y-AL);
-
-  let o = '<svg class="r-dimbox" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
-        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(wText)+' × '+esc(hText)+'">';
-
-  // Bleed outer rect (drawn first — behind inner rect)
-  if(db>0)
-    o += '<rect x="'+PL+'" y="'+PT+'" width="'+(rw+2*db)+'" height="'+(rh+2*db)+'" '
-       + bst+' rx="'+drOut+'" ry="'+drOut+'"/>';
-
-  // Inner rect (trim/product size)
-  o += '<rect x="'+rx+'" y="'+ry+'" width="'+rw+'" height="'+rh+'" stroke="'+st
-     + '" fill="var(--paper)" stroke-width="1.5" rx="'+dr+'" ry="'+dr+'"/>';
-
-  // Diagonal X cross — при fold каждая секция получает свой крест, не один на весь лист
-  if(hasFold && rh>rw){
-    // портрет: горизонтальная биговка в cy — верхняя и нижняя секции
-    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+cy+'" '+xt+'/>';
-    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+cy+'" '+xt+'/>';
-    o += '<line x1="'+rx+'" y1="'+cy+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
-    o += '<line x1="'+(rx+rw)+'" y1="'+cy+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-  } else if(hasFold){
-    // пейзаж/квадрат: вертикальная биговка в cx — левая и правая секции
-    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-    o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-    o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
-    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-  } else {
-    o += '<line x1="'+rx+'" y1="'+ry+'" x2="'+(rx+rw)+'" y2="'+(ry+rh)+'" '+xt+'/>';
-    o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+rx+'" y2="'+(ry+rh)+'" '+xt+'/>';
-  }
-  // Биговка: пунктир «цепочка» 8-3-2-3 (стандарт для линий сгиба)
-  if(hasFold){
-    const fl='stroke="'+dim+'" stroke-width="0.9" stroke-dasharray="8,3,2,3"';
-    if(rh>rw) o += '<line x1="'+rx+'" y1="'+cy+'" x2="'+(rx+rw)+'" y2="'+cy+'" '+fl+'/>';
-    else      o += '<line x1="'+cx+'" y1="'+ry+'" x2="'+cx+'" y2="'+(ry+rh)+'" '+fl+'/>';
-  }
-
-  // Width dim line: extension lines from inner rect bottom corners downward
-  o += '<line x1="'+rx+'" y1="'+(ry+rh)+'" x2="'+rx+'" y2="'+dim_y+'" '+el+'/>';
-  o += '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+el+'/>';
-  o += '<line x1="'+rx+'" y1="'+dim_y+'" x2="'+(cx-wGap)+'" y2="'+dim_y+'" '+dl+'/>';
-  o += '<line x1="'+(cx+wGap)+'" y1="'+dim_y+'" x2="'+(rx+rw)+'" y2="'+dim_y+'" '+dl+'/>';
-  o += '<path d="'+awL(rx,dim_y)+'" '+aw+'/><path d="'+awR(rx+rw,dim_y)+'" '+aw+'/>';
-  o += '<text x="'+cx+'" y="'+dim_y+'" text-anchor="middle" dominant-baseline="central" '
-     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(wText)+'</text>';
-
-  // Height dim line: extension lines from inner rect right corners rightward
-  o += '<line x1="'+(rx+rw)+'" y1="'+ry+'" x2="'+dlx+'" y2="'+ry+'" '+el+'/>';
-  o += '<line x1="'+(rx+rw)+'" y1="'+(ry+rh)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+el+'/>';
-  o += '<line x1="'+dlx+'" y1="'+ry+'" x2="'+dlx+'" y2="'+(cy-hGap)+'" '+dl+'/>';
-  o += '<line x1="'+dlx+'" y1="'+(cy+hGap)+'" x2="'+dlx+'" y2="'+(ry+rh)+'" '+dl+'/>';
-  o += '<path d="'+awU(dlx,ry)+'" '+aw+'/><path d="'+awD(dlx,ry+rh)+'" '+aw+'/>';
-  o += '<text x="'+dlx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="central" '
-     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'" '
-     + 'transform="rotate(-90 '+dlx+' '+cy+')">'+esc(hText)+'</text>';
-
-  return o+'</svg>';
+// Модификаторы эскиза в строке: «+N» — вылет N ед.; «rN» / «r=N» — скругление
+// углов N ед.; «fold» — линия сгиба. Значения могут быть дробными.
+function parseDimMods(mods){
+  const m = String(mods || '');
+  const bm = m.match(/\+(\d+(?:[.,]\d+)?)/);
+  const rm = m.match(/\br=?(\d+(?:[.,]\d+)?)/i);
+  return {
+    bleed: bm ? parseFloat(bm[1].replace(',', '.')) : 0,
+    rx:    rm ? parseFloat(rm[1].replace(',', '.')) : 0,
+    fold:  /\bfold\b/i.test(m),
+  };
 }
+const dimNum = raw => parseFloat(String(raw).replace(',', '.'));
+const dimI18n = () => DIM_SKETCH_I18N[LOCALE.lang];   // undefined → модуль берёт свой UA-дефолт
 
-
-
+// [WxHед] / [dDед] → строка SVG. Геометрия и покраска — в src/dimensionSketch.js
+// (общий визуальный контракт с BitrixUI). cross:true — фирменный X-крест Notatnyk.
+function renderDimbox(wRaw, hRaw, unitRaw, mods){
+  const { bleed, rx, fold } = parseDimMods(mods);
+  return renderDimensionSketch(
+    { shape: 'rect', width: dimNum(wRaw), height: dimNum(hRaw), unit: unitRaw,
+      bleed, cornerRadius: rx, fold, cross: true },
+    dimI18n());
+}
+function renderCircle(dRaw, unitRaw, mods){
+  const { bleed } = parseDimMods(mods);
+  return renderDimensionSketch(
+    { shape: 'circle', diameter: dimNum(dRaw), unit: unitRaw, bleed, cross: true },
+    dimI18n());
+}
 
 // Круговой эскиз [d50мм]: окружность с крестом центровых линий и размерной
 // стрелкой диаметра (ø). Разделитель: буква d/D (diameter). Те же правила безопасности,
-// что и buildDimSVG: вырезается до varRef/perUnitExpand.
+// что и у прямоугольника: вырезается до varRef/perUnitExpand.
 const RE_DIMCIRCLE = /\[[dD](\d+(?:[.,]\d+)?)\s*(мм|mm|см|cm|дм|dm|м(?!м)|m(?!m))((?:[+\s][^\]]*)?)\]/g;
-
-function buildDimCircleSVG(dRaw, unitRaw, mods) {
-  const dn = parseFloat(String(dRaw).replace(',','.'));
-  if(!isFinite(dn)||dn<=0) return esc('[d'+dRaw+unitRaw+']');
-  const uMap={'mm':'мм','мм':'мм','cm':'см','см':'см','dm':'дм','дм':'дм','m':'м','м':'м'};
-  const uLbl = uMap[unitRaw.toLowerCase()] || unitRaw;
-  const dNum = Number.isInteger(dn) ? String(dn) : String(dRaw).replace('.',',');
-  const dText = 'ø '+dNum+' '+uLbl;
-
-  const MAX_R=64, MIN_R=24;
-  const sc = Math.min(MAX_R*2/dn, 8);
-  const r = Math.round(Math.max(MIN_R, Math.min(MAX_R, dn/2*sc)));
-
-  // Parse modifiers — only +N bleed makes sense for a circle
-  const modsStr = String(mods||'');
-  const bleedRaw = (modsStr.match(/\+(\d+(?:[.,]\d+)?)/)||[])[1];
-  const db = bleedRaw ? bleedPx(parseFloat(bleedRaw.replace(',','.'))) : 0;
-
-  const EXT=6, PL=8, PT=8, DG=8, AL=6, AW=2.5;
-  const sans='-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,system-ui,sans-serif';
-
-  const dTextW = Math.ceil(dText.length*7)+6;
-  const cw = Math.max(2*(r+EXT), dTextW);
-  const cx = PL+cw/2;
-  // cy shifted down by db so outer circle (r+db) fits with PT+EXT clearance above
-  const cy = PT+db+r+EXT;
-  const dly = cy+r+db+DG;         // dim line below OUTER circle bottom
-  const TW = PL+cw+PL;
-  const TH = dly+16+6;
-
-  const st='var(--ink-soft)', di='var(--formula)', dim='var(--ink-soft)';
-  const cl='stroke="'+di+'" stroke-width="0.65" stroke-dasharray="6,3"';   // center lines
-  const el='stroke="'+dim+'" stroke-width="0.6"';
-  const dl='stroke="'+dim+'" stroke-width="0.8"';
-  const aw='stroke="'+dim+'" fill="none" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"';
-  const bst='stroke="'+di+'" fill="none" stroke-width="0.75" stroke-dasharray="5,3"'; // bleed
-
-  const dGap = Math.max(4, Math.min(r-AL-6, (dText.length*6.8+6)/2));
-  const awL=(x,y)=>'M '+(x+AL)+','+(y-AW)+' L '+x+','+y+' L '+(x+AL)+','+(y+AW);
-  const awR=(x,y)=>'M '+(x-AL)+','+(y-AW)+' L '+x+','+y+' L '+(x-AL)+','+(y+AW);
-
-  let o = '<svg class="r-dimbox r-dimbox-circle" viewBox="0 0 '+TW+' '+TH+'" width="'+TW+'" height="'+TH+'" '
-        + 'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(dText)+'">';
-
-  // Bleed outer circle (drawn first — behind inner)
-  if(db>0)
-    o += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+db)+'" '+bst+'/>';
-
-  // Inner circle (product/trim size)
-  o += '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" stroke="'+st+'" fill="var(--paper)" stroke-width="1.5"/>';
-
-  // Center crosshair (extends EXT beyond inner circle, marks product boundary)
-  o += '<line x1="'+(cx-r-EXT)+'" y1="'+cy+'" x2="'+(cx+r+EXT)+'" y2="'+cy+'" '+cl+'/>';
-  o += '<line x1="'+cx+'" y1="'+(cy-r-EXT)+'" x2="'+cx+'" y2="'+(cy+r+EXT)+'" '+cl+'/>';
-
-  // Extension lines from inner equator (cx±r, cy) down to dim line
-  o += '<line x1="'+(cx-r)+'" y1="'+cy+'" x2="'+(cx-r)+'" y2="'+(dly-2)+'" '+el+'/>';
-  o += '<line x1="'+(cx+r)+'" y1="'+cy+'" x2="'+(cx+r)+'" y2="'+(dly-2)+'" '+el+'/>';
-
-  // Dim line showing INNER (trim) diameter
-  o += '<line x1="'+(cx-r)+'" y1="'+dly+'" x2="'+(cx-dGap)+'" y2="'+dly+'" '+dl+'/>';
-  o += '<line x1="'+(cx+dGap)+'" y1="'+dly+'" x2="'+(cx+r)+'" y2="'+dly+'" '+dl+'/>';
-  o += '<path d="'+awL(cx-r,dly)+'" '+aw+'/><path d="'+awR(cx+r,dly)+'" '+aw+'/>';
-  o += '<text x="'+cx+'" y="'+dly+'" text-anchor="middle" dominant-baseline="central" '
-     + 'font-size="9.5" fill="'+dim+'" font-family="'+sans+'">'+esc(dText)+'</text>';
-
-  return o+'</svg>';
-}
-
-
-
-
 // Величины ищутся на СЫРОМ тексте (план §7: до esc()/цен/calc()), но не должны
 // цеплять содержимое `inline code` и габаритных эскизов [WxHunit]/[dDunit] — эти
 // диапазоны маскируются пробелами той же длины (позиции не сдвигаются), прежде
@@ -593,9 +434,9 @@ export function inline(text, opts){
   // было бы принято как qty и делило бы ближайшее «Итого» на 57.
   const dimBoxes = [];
   RE_DIMBOX.lastIndex = 0;
-  s = s.replace(RE_DIMBOX, (m, w, h, u, mods) => `${dimBoxes.push({kind:'rect', w, h, u, mods: mods||''}) - 1}`);
+  s = s.replace(RE_DIMBOX, (m, w, h, u, mods) => `${dimBoxes.push({kind:'rect', w, h, u, mods: mods||'', src: m}) - 1}`);
   RE_DIMCIRCLE.lastIndex = 0;
-  s = s.replace(RE_DIMCIRCLE, (m, d, u, mods) => `${dimBoxes.push({kind:'circle', d, u, mods: mods||''}) - 1}`);
+  s = s.replace(RE_DIMCIRCLE, (m, d, u, mods) => `${dimBoxes.push({kind:'circle', d, u, mods: mods||'', src: m}) - 1}`);
 
   // Одиночная [ссылка] на переменную вне формулы — подставляем её значение.
   // «= [имя] грн» — как обычная цена с «=»: идёт в Σ; «[имя] грн» — прочая цена.
@@ -658,12 +499,16 @@ export function inline(text, opts){
   s = s.replace(/(https?:\/\/[^\s<>"'`]+)/g,
     (m, url) => `<a href="${escAttr(url)}" target="_blank" rel="noopener">${url}</a>`);
 
-  // Возврат эскизов-габаритов: SVG-набросок с размерными стрелками.
+  // Возврат эскизов: <figure> с дословным исходником, SVG и подписью.
+  // Только render()/экспорт — inlineSource() эскизы не трогает (инвариант И1).
   s = s.replace(/(\d+)/g, (m, i) => {
     const box = dimBoxes[+i];
-    return box.kind === 'circle'
-      ? buildDimCircleSVG(box.d, box.u, box.mods || '')
-      : buildDimSVG(box.w, box.h, box.u, box.mods || '');
+    const svg = box.kind === 'circle'
+      ? renderCircle(box.d, box.u, box.mods || '')
+      : renderDimbox(box.w, box.h, box.u, box.mods || '');
+    return `<figure class="r-dim-figure"><code class="r-dim-source">${esc(box.src)}</code>`
+      + svg
+      + `<figcaption>${esc(LOCALE.sketchCaption || '')}</figcaption></figure>`;
   });
 
   // Возврат инлайн-кода: моноширинный чип в рамке (стили — .rendered code).
@@ -691,12 +536,33 @@ function stripInline(s){
 // сворачивает их БЕЗ повторного парсинга (порт из рабочего референса BitrixUI).
 
 // Эскиз ВНУТРИ текста (не единственный элемент) — абзац нужно изолировать через BFC,
-// чтобы float не вытекал в соседние блоки. Standalone-эскиз (весь абзац — только SVG)
-// не изолируем: его float пробивается в следующий абзац, давая газетное обтекание.
+// чтобы float не вытекал в соседние блоки. Standalone-эскиз (весь абзац — только
+// <figure> с эскизом) не изолируем: его float пробивается в следующий абзац,
+// давая газетное обтекание. Вырезаем всю <figure class="r-dim-figure"> целиком —
+// иначе дословный исходник в <code class="r-dim-source"> и <figcaption> сочлись
+// бы за «текст рядом с эскизом».
 function hasDimboxWithText(html){
   if(!html.includes('r-dimbox')) return false;
-  const rest = html.replace(/<svg[\s\S]*?<\/svg>/g,'').replace(/<[^>]+>/g,'').trim();
+  const rest = html.replace(/<figure class="r-dim-figure">[\s\S]*?<\/figure>/g,'')
+                   .replace(/<[^>]+>/g,'').trim();
   return rest.length > 0;
+}
+
+// Подряд идущие блоки-параметры «- Ключ: Значення» (kind:'param', класс
+// «r-li r-param») → один <dl class="spec-param-list"> с грид-строками <dt>/<dd>.
+// Работает на уже собранном HTML — и render().html (экспорт), и renderNodesHtml()
+// в main.js (компактный вид) прогоняют результат через эту функцию. Свап
+// <span> → <dt>/<dd> — те же три замены, что в BitrixUI SpecChecklist.tsx.
+// Значение параметра не содержит «</div>» (inline() их не порождает), поэтому
+// ленивый «[\s\S]*?</div>» надёжно берёт закрытие своего <div>.
+export function wrapParamRuns(html){
+  return String(html).replace(
+    /(?:<div data-line="\d+" class="r-li r-param(?: strong)?">[\s\S]*?<\/div>)+/g,
+    run => '<dl class="spec-param-list">'
+      + run.replace(/<span class="r-param-label">/g, '<dt>')
+           .replace(/<\/span><span class="r-param-value">/g, '</dt><dd>')
+           .replace(/<\/span><\/div>/g, '</dd></div>')
+      + '</dl>');
 }
 
 export function render(text, opts){
@@ -720,6 +586,10 @@ export function render(text, opts){
     (mm, q, unit) => {
       const qty = parseMoney(q);
       if(!qty || base == null) return mm;
+      // «[296x148mm +2 fold]» — дословный исходник эскиза в <code class="r-dim-source">
+      // (сам SVG уже отрендерен), а не тираж «[N ед]». Признак: «единица» начинается
+      // с разделителя размера (x/х/×) и цифры.
+      if(/^[xXхХ×]\s*\d/.test(unit)) return mm;
       return `<span class="per-unit">(${fmtNum(base / qty)} ${LOCALE.currency}/${unit.trim()})</span>`;
     });
   let checkLineMap = [];   // индекс чекбокса в рендере -> номер строки в тексте
@@ -974,6 +844,19 @@ export function render(text, opts){
       emit(`<div class="${nc}">${m[1]} ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
     if(m = t.match(/^[-*]\s+(.*)$/)){
+      // «- Ключ: Значення» → параметр изделия (грид <dt>/<dd> после группировки
+      // wrapParamRuns). Метка ≤ 40 символов без «:»; «**…**» — на обоих концах
+      // или ни на одном (иначе это просто жирный текст со списочным маркером).
+      const p = m[1].match(/^(\*\*)?([^:]{1,40}):\s*(.+?)(\*\*)?$/);
+      if(p && Boolean(p[1]) === Boolean(p[4])){
+        const lab = inlineAt(p[2]);
+        const val = inlineAt(p[3]);
+        add(lab.sum + val.sum);
+        const strong = p[1] ? ' strong' : '';
+        emit(`<div class="r-li r-param${strong}"><span class="r-param-label">${lab.html}</span>`
+           + `<span class="r-param-value">${val.html}</span></div>`, 'param', { sum: lab.sum + val.sum });
+        continue;
+      }
       const r = inlineAt(m[1]); add(r.sum);
       const lc = hasDimboxWithText(r.html) ? 'r-li r-li-hd' : 'r-li';
       emit(`<div class="${lc}">${r.html}</div>`, 'li', { sum: r.sum }); continue;
@@ -995,6 +878,12 @@ export function render(text, opts){
     if(!EXPORT)
       emit(`<div class="r-callout strong"><span class="r-callout-ico">${ICO.danger}</span><span>${esc(msg)}</span></div>`, 'callout');
   }
+  // Параметры «- Ключ: Значення» остаются в blocks[] как <div class="r-li r-param">
+  // с <span>-парами — так же, как в движке BitrixUI (общие contract-fixtures
+  // проверяют именно этот уровень). Обёртку в <dl class="spec-param-list"> и свап
+  // на <dt>/<dd> делает СЛОЙ ПРЕДСТАВЛЕНИЯ через wrapParamRuns(): main.js в
+  // renderNodesHtml() (компактный вид) и exportNote() (клиентский HTML), как
+  // SpecChecklist.tsx в BitrixUI.
   const html = blocks.map(b => b.html).join('');
 
   // объявленные "Итого" (может быть несколько секций) — суммируем все. Берём уже
