@@ -29,10 +29,16 @@
   background:transparent;color:var(--ink-soft);cursor:pointer;
   display:grid;place-items:center;}
 .ghost:hover{background:color-mix(in srgb,var(--check) 8%,var(--paper-2));color:var(--ink);}
-/* Тумблер «Документ» активен / акцентная кнопка «Отдать клиенту» (Э1) */
+/* Тумблер «Документ» активен / акцентная кнопка «Скопировать документ» (Э1) */
 .ghost.active{background:var(--sum-bg);color:var(--check);border-color:var(--sum-line);}
 .ghost.accent{background:var(--check);color:#fff;border-color:var(--check);box-shadow:var(--sh-1);}
 .ghost.accent:hover{filter:brightness(1.08);color:#fff;box-shadow:var(--sh-2);}
+
+/* #copyBtn: флеш «скопировано» — на секунду подменяем иконку и красим в зелёный */
+#copyBtn .i-check{display:none;}
+#copyBtn.copied{background:var(--green);border-color:var(--green);}
+#copyBtn.copied .i-copy{display:none;}
+#copyBtn.copied .i-check{display:block;}
 
 /* toolbar (панель вставки паттернов) */
 .toolbar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);
