@@ -27,6 +27,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Aleksieiev Valentyn",
+    "copyright": "© 2026 Aleksieiev Valentyn. All rights reserved.\nE-mail: director@druk.kh.ua",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

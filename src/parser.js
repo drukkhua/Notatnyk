@@ -71,6 +71,7 @@ export const LOCALE = {
   yearSuffix: 'г',        // суффикс года в дате [date]: «16.07.2026г»
   positions:  'позиций',  // слово в футере: «Σ позиций (N)»
   section:    'секции',   // слово в подытоге секции: «Σ секции N»
+  sectionTotals: 'итогов секций', // слово в общем итоге: «Σ итогов секций N»
   client:     'клиент',   // роль в цитате клиента: «> @Имя»
   unclosed:   'Блок /* открыт в строке {n} и не закрыт — всё ниже скрыто',
   internal:   'внутренние расчёты',   // подпись свёрнутого /* */ чипа «🙈 …»
@@ -106,6 +107,8 @@ function buildPatterns(){
   RE.price     = new RegExp(`(\\\\)?([=:]\\s*)?([.,]?)(\\d[\\d\\s]*(?:[.,]\\d+)?)\\s*${cur}${uSfx}?${NL}`, 'gi');
   RE.calc      = new RegExp(`((?:\\[[^\\]]+\\]|[0-9])(?:\\[[^\\]]+\\]|[0-9.,()+\\-*/%^\\s])*?)\\s*=(\\s*${cur}${uSfx}?${NL})?`, 'gi');
   RE.totalLine = new RegExp(`^(${tot})${NL}\\s*(:?)\\s*(.*)$`, 'i');
+  // Общий итог сверяет уже закрытые секции, а не открывает ещё одну пустую.
+  RE.grandTotalLine = /^(Итого\s+(?:общее|общ\.)|Общее\s+итого|Общий\s+итог|Общ\.\s+итог|Всего|Разом\s+(?:загалом|заг\.)|Загалом|Grand\s+total)(?=\s|:|$)\s*(:?)\s*(.*)$/i;
   RE.posPrice  = new RegExp(`(?<!\\\\)[=:]\\s*[\\d][\\d\\s]*(?:[.,]\\d+)?\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
   RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
@@ -575,6 +578,7 @@ export function render(text, opts){
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
   const add = v => { total += v; sectionSum += v; };
   const sections = [];                         // [{declared, sum, line}] — по одному на строку «Итого»
+  let grandTotal = null;
   // Компактная диагностика готовности (см. docs/print-spec-parser-render-audit.md, п.4):
   // {code, severity, line?, message} — данные, а не готовый HTML; UI решает, как показать.
   const diagnostics = [];
@@ -798,6 +802,30 @@ export function render(text, opts){
             + `<span class="r-callout-ico">${strong?ICO.danger:ICO.warn}</span>`
             + `<span>${r.html}</span></div>`, 'callout', { sum: r.sum }); continue;
     }
+    if(m = t.match(RE.grandTotalLine)){
+      const rest = m[3];
+      const r = inlineAt(rest, { context: 'total' });
+      const tq = r.terminalQuantity;
+      const tqIsCurrency = tq && tq.kind === 'quantity' && tq.unitKey === normalizeUnitKey(LOCALE.currency);
+      const dm = rest.match(/\d[\d\s]*(?:[.,]\d+)?/);
+      const declaredHere = tqIsCurrency ? tq.value : (dm ? parseMoney(dm[0]) : null);
+      const closedSum = sections.reduce((sum, sec) => sum + (sec.declared ?? sec.sum), 0);
+      const expected = Math.round((closedSum + sectionSum) * 100) / 100;
+      const diff = declaredHere == null ? 0 : Math.round((expected - declaredHere) * 100) / 100;
+      const fb = declaredHere == null
+        ? `<span class="r-total-ok">Σ ${LOCALE.sectionTotals}: ${fmtNum(expected)} ${LOCALE.currency}</span>`
+        : diff === 0 ? '<span class="r-total-ok">✓</span>'
+        : `<span class="r-total-bad">✕ Σ ${LOCALE.sectionTotals} ${fmtNum(expected)} (${diff>0?'+':''}${fmtNum(diff)})</span>`;
+      if(diff !== 0)
+        diagnostics.push({ code: 'grand_total_mismatch', severity: 'warning', line: curLine,
+          message: `Сумма итогов секций ${fmtNum(expected)} ${LOCALE.currency} не совпадает с общим итогом ${fmtNum(declaredHere)} ${LOCALE.currency}` });
+      const restHtml = perUnitExpand(r.html, declaredHere ?? expected);
+      emit(`<div class="r-total"><b>${m[1]}${m[2]||''}</b> ${restHtml} ${fb}</div>`, 'grand-total',
+        { declared: declaredHere });
+      grandTotal = { declared: declaredHere, sum: expected, line: curLine };
+      lastTotal = declaredHere ?? expected;
+      continue;
+    }
     if(m = t.match(RE.totalLine)){
       const rest = m[3];
       // context:'total' — typed-выражение величины здесь не идёт в sectionSum (план §8);
@@ -895,11 +923,12 @@ export function render(text, opts){
     if(sec.declared != null){ declaredSum += sec.declared; hasDeclared = true; }
   }
   if(hasDeclared) declared = declaredSum;
+  if(grandTotal?.declared != null) declared = grandTotal.declared;
 
   // Считаем позиции по тексту БЕЗ строк «Итого» — теперь, когда «:» тоже цена в Σ,
   // строка «Итого: N грн» иначе засчиталась бы как отдельная позиция (её сумма
   // учитывается отдельно, как сверка секции, а не как позиция).
-  const countText = lines.filter(l => !RE.totalLine.test(l.trim())).join('\n');
+  const countText = lines.filter(l => !RE.totalLine.test(l.trim()) && !RE.grandTotalLine.test(l.trim())).join('\n');
   positions = (countText.match(RE.posPrice)||[]).length // цены =/: N грн (кроме /шт)
             + (countText.match(RE.posCalc)||[]).length;  // калькулятор = грн (кроме /шт)
   RE.posVar.lastIndex = 0;
@@ -930,7 +959,7 @@ export function render(text, opts){
   return {
     html,
     blocks,
-    stats: { total, checksTotal, checksDone, positions, declared, sections, pay },
+    stats: { total, checksTotal, checksDone, positions, declared, sections, grandTotal, pay },
     checkLineMap,
     diagnostics,
     fmt
@@ -1096,6 +1125,10 @@ export function renderSourceLines(text){
       out += `<div ${dl} class="ed-line r-callout${strong ? ' strong' : ''}">`
         + `<span class="r-callout-ico" contenteditable="false">${strong ? ICO.danger : ICO.warn}</span>`
         + `${edSyn(m[1] + m[2])}<span>${inlineSource(m[3])}</span></div>`;
+      continue;
+    }
+    if(m = t.match(RE.grandTotalLine)){
+      out += `<div ${dl} class="ed-line r-total"><b>${esc(m[1])}${m[2] || ''}</b> ${inlineSource(m[3])}</div>`;
       continue;
     }
     if(m = t.match(RE.totalLine)){

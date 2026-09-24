@@ -71,6 +71,14 @@ let notes = [];        // [{id, title, body, updated}]
 let currentId = null;
 let saveTimer = null;
 let query = '';        // строка поиска
+let subtotalCount = 0, subtotalAmount = 0;
+
+function grandTotalLabel(){
+  return lang === 'uk' ? 'Разом загалом' : lang === 'en' ? 'Grand total' : 'Общее итого';
+}
+function grandTotalInsert(){
+  return `${grandTotalLabel()}: ${subtotalAmount.toLocaleString('ru-RU', { maximumFractionDigits: 2 }).replace(/\s/g, ' ')} ${LOCALE.currency}`;
+}
 
 // --- els ---
 const $ = s => document.querySelector(s);
@@ -526,6 +534,12 @@ function onPaletteKey(e){
 function paint(){
   const text = src.value;
   const { stats, checkLineMap, blocks } = render(text);
+  const nextCount = stats.sections.length;
+  const nextAmount = Math.round(stats.sections.reduce((sum, sec) => sum + (sec.declared ?? sec.sum), 0) * 100) / 100;
+  if(nextCount !== subtotalCount || nextAmount !== subtotalAmount){
+    subtotalCount = nextCount; subtotalAmount = nextAmount;
+    buildToolbar(); buildCheat();
+  }
   lastCheckMap = checkLineMap;
   renderTree = groupBlocks(blocks);
   applyFoldDefaults();
@@ -542,11 +556,12 @@ function paint(){
   const nf = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }); // как в движке
   const C = LOCALE.currency;
   const secs = stats.sections || [];
-  if(secs.length){
+  if(secs.length || stats.grandTotal){
     // Разбивка по каждому «Итого» + их общая сумма
     const parts = secs.map((s, i) => `${LOCALE.total}(${i+1}): ${nf(s.declared != null ? s.declared : s.sum)} ${C}`);
     const declaredSum = stats.declared != null ? stats.declared : stats.total;
-    sumLabel.innerHTML = parts.join(' · ') + `  ·  <b>${t('sumWord')}: ${nf(declaredSum)} ${C}</b>`;
+    sumLabel.innerHTML = (parts.length ? parts.join(' · ') + '  ·  ' : '')
+      + `<b>${t('sumWord')}: ${nf(declaredSum)} ${C}</b>`;
     const diff = Math.round((stats.total - declaredSum) * 100) / 100;
     if(diff === 0){
       sumState.className = 'ok';
@@ -837,6 +852,8 @@ function buildSyntax(){
     { btn:`${cur}/${unit}`, ins:` ${cur}/${unit}`,      w:`${cur}/${unit}`,       g:t('sPerUnit') },
     { btn:tot,              block:`${tot}  ${cur}`, caret:` ${cur}`,
                             w:`${tot}: N ${cur}`,                                 g:t('sTotal') },
+    ...(subtotalCount >= 2 ? [{ btn:grandTotalLabel(), block:grandTotalInsert(),
+      w:`${grandTotalLabel()}: N ${cur}`, g:t('sGrandTotal') }] : []),
     { btn:`[${unit}]`,      ins:`[4000 ${unit}]`, sel:'4000', w:`[4000 ${unit}]`, g:t('sQtyUnit', { total: tot }) },
 
     // Денежная петля: строковые и спец-переменные → кнопки в экспорте «Отдать клиенту».
@@ -1315,6 +1332,8 @@ function slashItems(){
   return [
     { label:`= 0 ${cur}`,               desc:t('sPrice'),   keys:`price cena цена сумма = : ${cur}`,  ins:`= 0 ${cur}`, sel:'0' },
     { label:`${tot}:`,                  desc:t('sTotal'),   keys:`total итого разом подытог`,          block:`${tot}  ${cur}`, caret:` ${cur}` },
+    ...(subtotalCount >= 2 ? [{ label:`${grandTotalLabel()}:`, desc:t('sGrandTotal'),
+      keys:'общий общее итого всего разом загалом загальний grand total', block:grandTotalInsert() }] : []),
     { label:`[4000 ${unit}]`,           desc:t('sQtyUnit',{total:tot}), keys:`unit шт цена за единицу тираж`, ins:`[4000 ${unit}]`, sel:'4000' },
     { label:'2*3=',                     desc:t('sCalc'),    keys:`calc калькулятор формула math расчёт`, ins:'2*3=', sel:'2*3' },
     { label:`50 ${unit} + 50 ${unit} =`, desc:t('sCalcQty'), keys:`qty величина единица calc калькулятор`, ins:`50 ${unit} + 50 ${unit} =`, sel:`50 ${unit}` },
