@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "syntaxVersion": "1.2.1",
+    "syntaxVersion": "1.2.2",
     "note": "Contract-fixtures для движка ТЗ (render()/inline() в src/parser.js и src/lib/specEngine.ts). Копия этого файла должна быть идентична в notatnyk-tauri/test/spec-fixtures.json и BitrixUI/frontend/src/lib/__tests__/spec-fixtures.json — при изменении грамматики обновляй оба файла и SPEC_SYNTAX_VERSION в обоих движках (см. docs/print-spec-parser-render-audit.md, раздел 5)."
   },
   "cases": [
@@ -22,15 +22,26 @@
       "source": "Итого: 10,50 грн",
       "mode": "edit",
       "expect": {
-        "sections": [{ "declared": 10.5, "sum": 0 }],
-        "diagnosticsInclude": [{ "code": "local_total_mismatch", "line": 0 }]
+        "sections": [
+          {
+            "declared": 10.5,
+            "sum": 0
+          }
+        ]
       }
     },
     {
       "name": "money-thousands-and-decimal-comma",
       "source": "Итого: 1 250,75 грн",
       "mode": "edit",
-      "expect": { "sections": [{ "declared": 1250.75, "sum": 0 }] }
+      "expect": {
+        "sections": [
+          {
+            "declared": 1250.75,
+            "sum": 0
+          }
+        ]
+      }
     },
     {
       "name": "total-russian-and-ukrainian-aliases-in-one-document",
@@ -40,8 +51,20 @@
         "total": 300,
         "declared": 300,
         "positions": 2,
-        "sections": [{ "declared": 100, "sum": 100 }, { "declared": 200, "sum": 200 }],
-        "htmlIncludes": ["<b>Итого:</b>", "<b>Разом:</b>"]
+        "sections": [
+          {
+            "declared": 100,
+            "sum": 100
+          },
+          {
+            "declared": 200,
+            "sum": 200
+          }
+        ],
+        "htmlIncludes": [
+          "<b>Итого:</b>",
+          "<b>Разом:</b>"
+        ]
       }
     },
     {
@@ -54,20 +77,41 @@
         "checksTotal": 2,
         "checksDone": 0,
         "positions": 2,
-        "sections": [{ "declared": 1000, "sum": 1000 }, { "declared": 500, "sum": 500 }]
+        "sections": [
+          {
+            "declared": 1000,
+            "sum": 1000
+          },
+          {
+            "declared": 500,
+            "sum": 500
+          }
+        ]
       }
     },
     {
       "name": "hidden-block-visible-in-edit",
       "source": "/* внутренняя формула\nсекретный текст\n*/\n= 500 грн",
       "mode": "edit",
-      "expect": { "total": 500, "htmlIncludes": ["class=\"r-hidden\"", "секретный текст"] }
+      "expect": {
+        "total": 500,
+        "htmlIncludes": [
+          "class=\"r-hidden\"",
+          "секретный текст"
+        ]
+      }
     },
     {
       "name": "hidden-block-absent-in-export",
       "source": "/* внутренняя формула\nсекретный текст\n*/\n= 500 грн",
       "mode": "export",
-      "expect": { "total": 500, "htmlExcludes": ["r-hidden", "секретный текст"] }
+      "expect": {
+        "total": 500,
+        "htmlExcludes": [
+          "r-hidden",
+          "секретный текст"
+        ]
+      }
     },
     {
       "name": "dangerous-url-quote-and-script-tag-neutralized",
@@ -78,7 +122,10 @@
           "<a href=\"https://evil.example/\" target=\"_blank\" rel=\"noopener\">https://evil.example/</a>",
           "&lt;script&gt;alert(2)&lt;/script&gt;"
         ],
-        "htmlExcludes": ["example/\"onmouseover=\"", "<script>alert(2)</script>"]
+        "htmlExcludes": [
+          "example/\"onmouseover=\"",
+          "<script>alert(2)</script>"
+        ]
       }
     },
     {
@@ -110,8 +157,15 @@
       "source": "/* not closed",
       "mode": "edit",
       "expect": {
-        "htmlIncludes": ["Блок /* открыт в строке 1 и не закрыт — всё ниже скрыто"],
-        "diagnosticsInclude": [{ "code": "unclosed_hidden_block", "line": 0 }]
+        "htmlIncludes": [
+          "Блок /* открыт в строке 1 и не закрыт — всё ниже скрыто"
+        ],
+        "diagnosticsInclude": [
+          {
+            "code": "unclosed_hidden_block",
+            "line": 0
+          }
+        ]
       }
     },
     {
@@ -119,15 +173,28 @@
       "source": "/* not closed",
       "mode": "export",
       "expect": {
-        "htmlExcludes": ["не закрыт"],
-        "diagnosticsInclude": [{ "code": "unclosed_hidden_block", "line": 0 }]
+        "htmlExcludes": [
+          "не закрыт"
+        ],
+        "diagnosticsInclude": [
+          {
+            "code": "unclosed_hidden_block",
+            "line": 0
+          }
+        ]
       }
     },
     {
       "name": "unknown-variable-left-untouched",
       "source": "[nope] грн",
       "mode": "edit",
-      "expect": { "total": 0, "positions": 0, "htmlIncludes": ["[nope] грн"] }
+      "expect": {
+        "total": 0,
+        "positions": 0,
+        "htmlIncludes": [
+          "[nope] грн"
+        ]
+      }
     },
     {
       "name": "diagnostics-template-placeholder-qty-and-price",
@@ -135,8 +202,14 @@
       "mode": "edit",
       "expect": {
         "diagnosticsInclude": [
-          { "code": "template_placeholder", "line": 0 },
-          { "code": "template_placeholder", "line": 1 }
+          {
+            "code": "template_placeholder",
+            "line": 0
+          },
+          {
+            "code": "template_placeholder",
+            "line": 1
+          }
         ]
       }
     },
@@ -144,7 +217,14 @@
       "name": "diagnostics-empty-product-name",
       "source": "[ ] :",
       "mode": "edit",
-      "expect": { "diagnosticsInclude": [{ "code": "template_placeholder", "line": 0 }] }
+      "expect": {
+        "diagnosticsInclude": [
+          {
+            "code": "template_placeholder",
+            "line": 0
+          }
+        ]
+      }
     },
     {
       "name": "quantity-same-unit-addition",
@@ -152,14 +232,23 @@
       "mode": "edit",
       "expect": {
         "total": 0,
-        "htmlIncludes": ["<span class=\"calc-formula\">50 шт + 50 шт</span>", "<span class=\"calc-res\">100 шт</span>"]
+        "htmlIncludes": [
+          "<span class=\"calc-formula\">50 шт + 50 шт</span>",
+          "<span class=\"calc-res\">100 шт</span>"
+        ]
       }
     },
     {
       "name": "quantity-currency-formula-sums-once",
       "source": "3720 грн - 10% =",
       "mode": "edit",
-      "expect": { "total": 3348, "positions": 0, "htmlIncludes": ["<span class=\"price-sum\">3 348,00 грн</span>"] }
+      "expect": {
+        "total": 3348,
+        "positions": 0,
+        "htmlIncludes": [
+          "<span class=\"price-sum\">3 348,00 грн</span>"
+        ]
+      }
     },
     {
       "name": "quantity-terminal-drives-total-line",
@@ -167,33 +256,61 @@
       "mode": "edit",
       "expect": {
         "declared": 3348,
-        "sections": [{ "declared": 3348, "sum": 3348 }],
-        "htmlIncludes": ["<span class=\"r-total-ok\">✓</span>"]
+        "sections": [
+          {
+            "declared": 3348,
+            "sum": 3348
+          }
+        ],
+        "htmlIncludes": [
+          "<span class=\"r-total-ok\">✓</span>"
+        ]
       }
     },
     {
       "name": "quantity-area-unit-not-mistaken-for-percent",
       "source": "50 м2 + 10% =",
       "mode": "edit",
-      "expect": { "htmlIncludes": ["55 м2"], "htmlExcludes": ["2,2", "<span class=\"calc-res\">2,2</span>"] }
+      "expect": {
+        "htmlIncludes": [
+          "55 м2"
+        ],
+        "htmlExcludes": [
+          "2,2",
+          "<span class=\"calc-res\">2,2</span>"
+        ]
+      }
     },
     {
       "name": "quantity-arbitrary-unit-fractional-result",
       "source": "5 автомобилей - 10% =",
       "mode": "edit",
-      "expect": { "htmlIncludes": ["<span class=\"calc-res\">4,5 автомобилей</span>"] }
+      "expect": {
+        "htmlIncludes": [
+          "<span class=\"calc-res\">4,5 автомобилей</span>"
+        ]
+      }
     },
     {
       "name": "quantity-unit-with-plus-modifier",
       "source": "100 A3+ - 10% =",
       "mode": "edit",
-      "expect": { "htmlIncludes": ["<span class=\"calc-res\">90 A3+</span>"] }
+      "expect": {
+        "htmlIncludes": [
+          "<span class=\"calc-res\">90 A3+</span>"
+        ]
+      }
     },
     {
       "name": "quantity-per-unit-currency-excluded-from-sum",
       "source": "10 грн/шт - 10% =",
       "mode": "edit",
-      "expect": { "total": 0, "htmlIncludes": ["<span class=\"calc-res\">9 грн/шт</span>"] }
+      "expect": {
+        "total": 0,
+        "htmlIncludes": [
+          "<span class=\"calc-res\">9 грн/шт</span>"
+        ]
+      }
     },
     {
       "name": "quantity-unit-mismatch-preserves-text",
@@ -201,9 +318,18 @@
       "mode": "edit",
       "expect": {
         "total": 0,
-        "htmlIncludes": ["50 шт + 2 кг ="],
-        "htmlExcludes": ["calc-res"],
-        "diagnosticsInclude": [{ "code": "quantity_unit_mismatch", "line": 0 }]
+        "htmlIncludes": [
+          "50 шт + 2 кг ="
+        ],
+        "htmlExcludes": [
+          "calc-res"
+        ],
+        "diagnosticsInclude": [
+          {
+            "code": "quantity_unit_mismatch",
+            "line": 0
+          }
+        ]
       }
     },
     {
@@ -212,24 +338,42 @@
       "mode": "edit",
       "expect": {
         "total": 0,
-        "htmlIncludes": ["<code>50 шт + 50 шт =</code>"],
-        "htmlExcludes": ["calc-res", "calc-formula"],
-        "diagnosticsExclude": [{ "code": "quantity_syntax_error" }]
+        "htmlIncludes": [
+          "<code>50 шт + 50 шт =</code>"
+        ],
+        "htmlExcludes": [
+          "calc-res",
+          "calc-formula"
+        ],
+        "diagnosticsExclude": [
+          {
+            "code": "quantity_syntax_error"
+          }
+        ]
       }
     },
     {
       "name": "quantity-unfinished-line-no-diagnostic",
       "source": "50 шт + 50 шт",
       "mode": "edit",
-      "expect": { "diagnosticsCount": 0 }
+      "expect": {
+        "diagnosticsCount": 0
+      }
     },
     {
       "name": "quantity-unknown-numeric-variable",
       "source": "[остаток] шт + 2 шт =",
       "mode": "edit",
       "expect": {
-        "htmlIncludes": ["[остаток] шт + 2 шт ="],
-        "diagnosticsInclude": [{ "code": "quantity_unknown_variable", "line": 0 }]
+        "htmlIncludes": [
+          "[остаток] шт + 2 шт ="
+        ],
+        "diagnosticsInclude": [
+          {
+            "code": "quantity_unknown_variable",
+            "line": 0
+          }
+        ]
       }
     },
     {
@@ -238,23 +382,37 @@
       "mode": "export",
       "expect": {
         "total": 3348,
-        "htmlIncludes": ["<span class=\"price-sum\">3 348,00 грн</span>"],
-        "htmlExcludes": ["calc-formula", "3720"]
+        "htmlIncludes": [
+          "<span class=\"price-sum\">3 348,00 грн</span>"
+        ],
+        "htmlExcludes": [
+          "calc-formula",
+          "3720"
+        ]
       }
     },
     {
       "name": "quantity-old-scalar-format-with-trailing-currency-unchanged",
       "source": "3720 - 10% = грн",
       "mode": "edit",
-      "expect": { "total": 3348, "htmlIncludes": ["<span class=\"price-sum\">3 348 грн</span>"] }
+      "expect": {
+        "total": 3348,
+        "htmlIncludes": [
+          "<span class=\"price-sum\">3 348 грн</span>"
+        ]
+      }
     },
     {
       "name": "quantity-html-in-unit-is-escaped",
       "source": "5 <b>шт + 2 <b>шт =",
       "mode": "edit",
       "expect": {
-        "htmlIncludes": ["<span class=\"calc-res\">7 &lt;b&gt;шт</span>"],
-        "htmlExcludes": ["<b>шт"]
+        "htmlIncludes": [
+          "<span class=\"calc-res\">7 &lt;b&gt;шт</span>"
+        ],
+        "htmlExcludes": [
+          "<b>шт"
+        ]
       }
     },
     {
@@ -287,8 +445,111 @@
       "source": "- Звичайний пункт списку",
       "mode": "edit",
       "expect": {
-        "htmlIncludes": ["<div data-line=\"0\" class=\"r-li\">Звичайний пункт списку</div>"],
-        "htmlExcludes": ["r-param"]
+        "htmlIncludes": [
+          "<div data-line=\"0\" class=\"r-li\">Звичайний пункт списку</div>"
+        ],
+        "htmlExcludes": [
+          "r-param"
+        ]
+      }
+    },
+    {
+      "name": "declared-only-total",
+      "source": "А4, 500 шт\nРазом: 3072 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "declared": 3072,
+        "comparisonTotal": 3072,
+        "diagnosticsCount": 0
+      }
+    },
+    {
+      "name": "mixed-priced-and-declared-sections",
+      "source": "= 100 грн\nРазом: 100 грн\nБуклети\nІтого: 200 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 100,
+        "declared": 300,
+        "comparisonTotal": 300,
+        "diagnosticsCount": 0
+      }
+    },
+    {
+      "name": "zero-price-does-not-use-declared-fallback",
+      "source": "= 0 грн\nИтого: 200 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "comparisonTotal": 0,
+        "diagnosticsInclude": [
+          {
+            "code": "local_total_mismatch"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quantity-total-is-not-money",
+      "source": "Ітого: 1000 шт",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "comparisonTotal": 0,
+        "diagnosticsCount": 0
+      }
+    },
+    {
+      "name": "per-unit-total-is-not-money",
+      "source": "Разом: 5 грн/шт",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "comparisonTotal": 0,
+        "diagnosticsCount": 0
+      }
+    },
+    {
+      "name": "sketch-after-total-is-not-a-quantity",
+      "source": "Итого: 1000 грн\n[296x148mm +2 fold]",
+      "mode": "edit",
+      "expect": {
+        "total": 0,
+        "comparisonTotal": 1000,
+        "htmlIncludes": [
+          "r-dim-source",
+          "sketch-fold"
+        ],
+        "htmlExcludes": [
+          "(3,38 грн/x148mm"
+        ]
+      }
+    },
+    {
+      "name": "grand-total-counted-once",
+      "source": "= 100 грн\nИтого: 100 грн\n= 200 грн\nИтого: 200 грн\nОбщее итого: 300 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 300,
+        "declared": 300,
+        "comparisonTotal": 300,
+        "positions": 2,
+        "diagnosticsCount": 0
+      }
+    },
+    {
+      "name": "grand-total-mismatch-one-kopeck",
+      "source": "= 100 грн\nИтого: 100 грн\n= 200 грн\nИтого: 200 грн\nОбщее итого: 300,01 грн",
+      "mode": "edit",
+      "expect": {
+        "total": 300,
+        "declared": 300.01,
+        "comparisonTotal": 300,
+        "diagnosticsInclude": [
+          {
+            "code": "grand_total_mismatch"
+          }
+        ]
       }
     }
   ]

@@ -61,9 +61,9 @@ body.col-resizing{cursor:col-resize;user-select:none;}
    Десктоп: source/sym — выбранный редактор СЛЕВА + рендер справа; view — только
    рендер. Показ панелей — здесь, JS лишь ставит data-view (setView). */
 #sym{display:none;}                                   /* по умолчанию скрыт */
-.split[data-view="sym"] .editor-body{display:none;}
-.split[data-view="sym"] .toolbar{display:none;}       /* β: тулбар только в источнике */
-.split[data-view="sym"] #sym{display:block;}
+.split:is([data-view="sym"],[data-view="clean"]) .editor-body{display:none;}
+.split:is([data-view="sym"],[data-view="clean"]) .toolbar{display:none;}       /* β: тулбар только в источнике */
+.split:is([data-view="sym"],[data-view="clean"]) #sym{display:block;}
 .split[data-view="view"] .editorpane{display:none;}
 .split[data-view="view"] .divider{display:none;}
 

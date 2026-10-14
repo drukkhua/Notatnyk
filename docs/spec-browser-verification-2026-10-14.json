@@ -1,0 +1,62 @@
+{
+  "updated": 1791976367955,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.2 Safari/605.1.15",
+  "results": [
+    {
+      "profile": "Android 320 × 740, WebView inset 0",
+      "buttonTop": 60,
+      "footerClearance": 59,
+      "headerHeight": 167,
+      "issues": []
+    },
+    {
+      "profile": "Android 360 × 800, WebView inset 0",
+      "buttonTop": 60,
+      "footerClearance": 59,
+      "headerHeight": 167,
+      "issues": []
+    },
+    {
+      "profile": "iPhone 390 × 844, notch 59",
+      "buttonTop": 69,
+      "footerClearance": 59,
+      "headerHeight": 176,
+      "issues": []
+    },
+    {
+      "profile": "iPhone 430 × 932, notch 59",
+      "buttonTop": 69,
+      "footerClearance": 59,
+      "headerHeight": 176,
+      "issues": []
+    },
+    {
+      "profile": "Android landscape 800 × 360",
+      "buttonTop": 60,
+      "footerClearance": 59,
+      "headerHeight": 115,
+      "issues": []
+    },
+    {
+      "profile": "iPhone landscape 844 × 390",
+      "buttonTop": 60,
+      "footerClearance": 59,
+      "headerHeight": 115,
+      "issues": []
+    },
+    {
+      "profile": "Android large bottom inset 70",
+      "buttonTop": 60,
+      "footerClearance": 79,
+      "headerHeight": 167,
+      "issues": []
+    },
+    {
+      "profile": "Desktop 1280 × 800",
+      "buttonTop": 10,
+      "footerClearance": 11,
+      "headerHeight": 49,
+      "issues": []
+    }
+  ]
+}

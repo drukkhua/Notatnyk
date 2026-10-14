@@ -1,5 +1,15 @@
 import { render, setLocale, LOCALE, groupBlocks, allSectionKeys, longSectionKeys, renderSourceLines, wrapParamRuns, escAttr } from './parser.js';
 import { I18N, LANGS } from './i18n.js';
+import { summarizeTotals } from './summary.js';
+import { createSymEditor } from './sym-editor.js';
+import { sanitizeHtml, setSafeHtml } from './sanitize.js';
+import { createTemplateStore } from './templates.js';
+import { createTemplateUI } from './template-ui.js';
+import { SPEC_UI } from './spec-i18n.js';
+for(const code of LANGS) Object.assign(I18N[code], SPEC_UI[code]);
+
+// Keep in sync with responsive.css, including touch phones in landscape.
+const MOBILE_LAYOUT_QUERY = '(max-width:640px), (max-width:1024px) and (pointer:coarse) and (hover:none)';
 
 // --- fs через глобальный Tauri API (withGlobalTauri) ---
 // В этом проекте нет бандлера: файлы из src/ отдаются как есть, поэтому
@@ -51,7 +61,8 @@ async function loadConfig(){
       if(cfg.folder && await exists(cfg.folder, {})) loc = customLoc(cfg.folder);
       if(cfg.lang) lang = LANGS.includes(cfg.lang) ? cfg.lang : 'ru';
       if(cfg.locale) kwOverrides = cfg.locale;     // ручные правки ключевых слов
-      if(cfg.doc){                                  // шрифт/размер документа («Aa»)
+      if(cfg.doc){
+        if(['note','document','spec'].includes(cfg.doc.preset)) docPreset=cfg.doc.preset;                                  // шрифт/размер документа («Aa»)
         if(cfg.doc.font in DOC_FONTS) docFont = cfg.doc.font;
         if(+cfg.doc.size > 10 && +cfg.doc.size < 30) docSize = +cfg.doc.size;
       }
@@ -62,7 +73,7 @@ async function saveConfig(){
   const folder = loc.custom ? loc.dir : null;
   await writeTextFile(CONFIG, JSON.stringify({
     folder, lang, locale: kwOverrides,
-    doc: { font: docFont, size: docSize },
+    doc: { font: docFont, size: docSize, preset:docPreset },
   }), base);
 }
 
@@ -70,6 +81,9 @@ async function saveConfig(){
 let notes = [];        // [{id, title, body, updated}]
 let currentId = null;
 let saveTimer = null;
+const pendingSaves=new Map();
+let savingPromise=null;
+let saveError=false;
 let query = '';        // строка поиска
 let subtotalCount = 0, subtotalAmount = 0;
 
@@ -106,6 +120,16 @@ const locUnit = $('#locUnit');
 const locYear = $('#locYear');
 const locPositions = $('#locPositions');
 
+// Mobile totals float over the editor. Their height changes when amounts/status
+// wrap or the safe area changes, so reserve the measured height for scrolling.
+const footer = $('.footersum');
+const footerSizeObserver = new ResizeObserver(() => {
+  if(footer.offsetHeight > 0){
+    $('.workspace').style.setProperty('--mobile-footer-height', `${footer.offsetHeight}px`);
+  }
+});
+footerSizeObserver.observe(footer);
+
 // --- локализация ---
 let lang = 'ru';
 let T = I18N.ru;                          // активный словарь интерфейса
@@ -119,7 +143,7 @@ function applyDomText(){
   document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
   document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
   document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = t(el.dataset.i18nTitle));
-  document.querySelectorAll('[data-i18n-html]').forEach(el => el.innerHTML = t(el.dataset.i18nHtml));
+  document.querySelectorAll('[data-i18n-html]').forEach(el => setSafeHtml(el, t(el.dataset.i18nHtml)));
 }
 // Применить язык целиком: ключевые слова движка + весь интерфейс.
 function applyLang(code, overrides){
@@ -129,6 +153,7 @@ function applyLang(code, overrides){
   document.documentElement.setAttribute('lang', lang);
   applyDomText();
   buildToolbar(); buildCheat(); buildFontCards();
+  if(typeof templateUI!=='undefined')templateUI.refresh();
   reflectFolder();
   if(currentId !== undefined) paint();
   drawList();
@@ -208,7 +233,7 @@ function matches(n){
 
 // --- ui ---
 function drawList(){
-  noteList.innerHTML = '';
+  setSafeHtml(noteList, '');
   const shown = notes.filter(matches);
   if(shown.length === 0){
     const li = document.createElement('li');
@@ -223,8 +248,8 @@ function drawList(){
     const d = new Date(n.updated);
     const stamp = d.toLocaleDateString(T.dateLocale)
       + ' ' + d.toLocaleTimeString(T.dateLocale, { hour:'2-digit', minute:'2-digit' });
-    li.innerHTML = `<div class="t">${escapeHtml(n.title)}</div>`
-      + `<div class="d">${stamp}</div>`;
+    setSafeHtml(li, `<div class="t">${escapeHtml(n.title)}</div>`
+      + `<div class="d">${stamp}</div>`);
     li.onclick = ()=>{ select(n.id); setDrawer(false); };   // на телефоне закрываем drawer после выбора
     noteList.appendChild(li);
   }
@@ -234,16 +259,17 @@ function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>'
 function current(){ return notes.find(n=>n.id===currentId); }
 
 function select(id){
+  if(currentId && isSymMode()) symSync();
   currentId = id;
   const n = current();
   src.value = n ? n.body : '';
   loadFolds();            // свёрнутость этой заметки (localStorage), до первого paint
   drawList();
   // режим просмотра — запомненный для этой заметки, иначе дефолт (телефон — симбиоз)
-  const mode = loadView() || (window.matchMedia('(max-width:640px)').matches ? 'sym' : 'source');
+  const mode = loadView() || (window.matchMedia(MOBILE_LAYOUT_QUERY).matches ? 'sym' : 'source');
   applyView(mode);        // ставит панель БЕЗ коммита симбиоза: src.value уже = тело заметки
   paint();
-  if(mode === 'sym') symPaint(src.value);   // симбиоз-холст под новую заметку
+  if(isSymMode(mode)) symController.load(src.value);   // симбиоз-холст под новую заметку
 }
 
 // ── Компактный вид: дерево секций + свёрнутость (порт из BitrixUI) ───────────
@@ -271,7 +297,7 @@ function saveFolds(){
 const viewKey = () => currentId ? `notatnyk.view.${currentId}` : null;
 function loadView(){
   const k = viewKey(); if(!k) return null;
-  try{ const v = localStorage.getItem(k); return (v === 'source' || v === 'sym' || v === 'view') ? v : null; }catch{ return null; }
+  try{ const v = localStorage.getItem(k); return ['source','sym','clean','view'].includes(v)?v:null; }catch{ return null; }
 }
 function saveView(){
   const k = viewKey(); if(!k) return;
@@ -282,7 +308,7 @@ function applyFoldDefaults(){
   if(foldsInit) return;
   foldsInit = true;
   if(foldsStored) return;                       // у пользователя явное состояние
-  const mobile = window.matchMedia('(max-width:640px)').matches;
+  const mobile = window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
   currentFolds = new Set(mobile ? longSectionKeys(renderTree) : []);
 }
 
@@ -349,7 +375,7 @@ function toggleFold(key){
 
 // Отрисовать рендер из дерева + навесить обработчики (чек-боксы, шапки секций).
 function drawRender(){
-  out.innerHTML = renderNodesHtml(renderTree);
+  setSafeHtml(out, renderNodesHtml(renderTree));
   out.querySelectorAll('.r-check').forEach(node=>{
     node.onclick = ()=>{
       const idx = +node.dataset.check;
@@ -358,7 +384,7 @@ function drawRender(){
       lines[lineNo] = lines[lineNo].replace(/\[([ xX])\]/,(m,ch)=>
         ch.toLowerCase()==='x' ? '[ ]' : '[x]');
       src.value = lines.join('\n');
-      persist(); paint();
+      if(isSymMode())symController.replace(src.value);else{persist();paint();}
     };
   });
   out.querySelectorAll('.r-sec-head').forEach(head=>{
@@ -420,11 +446,11 @@ function openOutline(){
     b.type = 'button';
     b.className = `outline-item lvl${e.level}${i === curIdx ? ' cur' : ''}`;
     const sum = e.sum > 0 ? `<span class="outline-sum">${nf(e.sum)} ${LOCALE.currency}</span>` : '';
-    b.innerHTML = `<span class="outline-title">${escapeHtml(e.title)}</span>${sum}`;
+    setSafeHtml(b, `<span class="outline-title">${escapeHtml(e.title)}</span>${sum}`);
     b.onclick = () => jumpToSection(e.line, e.ancestors);
     box.appendChild(b);
   });
-  outlineEl.innerHTML = ''; outlineEl.appendChild(box);
+  setSafeHtml(outlineEl, ''); outlineEl.appendChild(box);
   outlineEl.hidden = false;
   positionOutline();
   const on = box.children[curIdx]; if(on) on.scrollIntoView({ block:'nearest' });
@@ -445,7 +471,7 @@ function jumpToSection(line, ancestors){
   for(const k of ancestors) if(currentFolds.has(k)){ currentFolds.delete(k); changed = true; }
   if(changed){ saveFolds(); drawRender(); collectAnchors(); updateFoldAllBtn(); }
   scrollPaneToLine(out, line);                   // рендер — канонический «атлас» сметы
-  if(viewMode === 'sym') scrollPaneToLine(sym, line);      // и активный редактор, если виден
+  if(isSymMode()) scrollPaneToLine(sym, line);      // и активный редактор, если виден
   else if(viewMode === 'source') scrollSrcToLine(line);
   closeOutline();
 }
@@ -469,7 +495,9 @@ function ensurePalette(){
   paletteEl = document.createElement('div');
   paletteEl.className = 'palette-wrap';
   paletteEl.hidden = true;
-  paletteEl.innerHTML = '<div class="palette"><input class="palette-input" type="text" spellcheck="false" /><div class="palette-list"></div></div>';
+  const box=document.createElement('div');box.className='palette';
+  const input=document.createElement('input');input.className='palette-input';input.type='text';input.spellcheck=false;
+  const list=document.createElement('div');list.className='palette-list';box.append(input,list);paletteEl.append(box);
   document.body.appendChild(paletteEl);
   palInput = paletteEl.querySelector('.palette-input');
   palListEl = paletteEl.querySelector('.palette-list');
@@ -505,14 +533,14 @@ function buildPalItems(qRaw){
 function renderPalette(){
   palItems = buildPalItems(palInput.value);
   palIdx = 0;
-  if(!palItems.length){ palListEl.innerHTML = `<div class="palette-empty">${escapeHtml(t('notFound'))}</div>`; return; }
-  palListEl.innerHTML = '';
+  if(!palItems.length){ setSafeHtml(palListEl, `<div class="palette-empty">${escapeHtml(t('notFound'))}</div>`); return; }
+  setSafeHtml(palListEl, '');
   palItems.forEach((it, i) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'palette-item' + (i === palIdx ? ' on' : '');
     const badge = it.kind === 'cmd' ? `<span class="palette-badge">${escapeHtml(t('cmdBadge'))}</span>` : '';
-    b.innerHTML = `<span class="palette-label">${escapeHtml(it.label)}</span>${badge}`;
+    setSafeHtml(b, `<span class="palette-label">${escapeHtml(it.label)}</span>${badge}`);
     b.onmousedown = e => { e.preventDefault(); it.run(); };
     b.onmousemove = () => { if(palIdx !== i){ palIdx = i; paintPalActive(); } };
     palListEl.appendChild(b);
@@ -533,7 +561,8 @@ function onPaletteKey(e){
 
 function paint(){
   const text = src.value;
-  const { stats, checkLineMap, blocks } = render(text);
+  const { stats, checkLineMap, blocks, diagnostics } = render(text);
+  showDiagnostics(diagnostics);
   const nextCount = stats.sections.length;
   const nextAmount = Math.round(stats.sections.reduce((sum, sec) => sum + (sec.declared ?? sec.sum), 0) * 100) / 100;
   if(nextCount !== subtotalCount || nextAmount !== subtotalAmount){
@@ -560,20 +589,20 @@ function paint(){
     // Разбивка по каждому «Итого» + их общая сумма
     const parts = secs.map((s, i) => `${LOCALE.total}(${i+1}): ${nf(s.declared != null ? s.declared : s.sum)} ${C}`);
     const declaredSum = stats.declared != null ? stats.declared : stats.total;
-    sumLabel.innerHTML = (parts.length ? parts.join(' · ') + '  ·  ' : '')
-      + `<b>${t('sumWord')}: ${nf(declaredSum)} ${C}</b>`;
-    const diff = Math.round((stats.total - declaredSum) * 100) / 100;
+    setSafeHtml(sumLabel, (parts.length ? parts.join(' · ') + '  ·  ' : '')
+      + `<b>${t('sumWord')}: ${nf(declaredSum)} ${C}</b>`);
+    const { comparison, difference: diff, usesDeclared } = summarizeTotals(stats);
     if(diff === 0){
       sumState.className = 'ok';
-      sumState.textContent = t('matchOk');
+      sumState.textContent = t(usesDeclared?'declaredAccepted':'matchOk');
     }else{
       const sign = diff > 0 ? '+' : '';
       sumState.className = 'bad';
-      sumState.textContent = t('mismatch', { x: nf(stats.total), d: sign + nf(diff) });
+      sumState.textContent = t('mismatch', { x: nf(comparison), d: sign + nf(diff) });
     }
   }else{
     // Нет ни одного «Итого» — просто общая Σ позиций
-    sumLabel.innerHTML = `Σ ${LOCALE.positions} (${stats.positions}) : <b>${nf(stats.total)} ${C}</b>`;
+    setSafeHtml(sumLabel, `Σ ${LOCALE.positions} (${stats.positions}) : <b>${nf(stats.total)} ${C}</b>`);
     sumState.className = 'ok';
     sumState.textContent = '—';
   }
@@ -613,7 +642,7 @@ function updateGutter(){
   ensureMirror();
   mirror.style.width = w + 'px';
   const lines = src.value.split('\n');
-  mirror.innerHTML = '';
+  setSafeHtml(mirror, '');
   const cells = lines.map(l => {
     const d = document.createElement('div');
     d.textContent = l === '' ? ' ' : l;
@@ -621,13 +650,14 @@ function updateGutter(){
     return d;
   });
   lineHeights = cells.map(d => d.offsetHeight);
-  mirror.innerHTML = '';
+  setSafeHtml(mirror, '');
   lineTops = [0];
   for(const h of lineHeights) lineTops.push(lineTops[lineTops.length - 1] + h);
   const lh = parseFloat(cs.lineHeight) || 22;  // высота одного визуального ряда
   gutterInner.style.width = (String(lines.length).length + 1) + 'ch';
-  gutterInner.innerHTML = lines.map((_, i) =>
-    `<div style="height:${lineHeights[i]}px;line-height:${lh}px">${i + 1}</div>`).join('');
+  gutterInner.replaceChildren(...lines.map((_,i)=>{
+    const row=document.createElement('div');row.style.height=lineHeights[i]+'px';row.style.lineHeight=lh+'px';row.textContent=i+1;return row;
+  }));
 }
 
 // Позиции блоков рендера в координатах скролла #out
@@ -706,21 +736,38 @@ src.addEventListener('scroll', () => {
 });
 out.addEventListener('scroll', () => {
   if(activePane !== 'out') return;
-  if(viewMode === 'sym') scrollPaneToLine(sym, topLineOf(out));  // рендер → симбиоз
+  if(isSymMode()) scrollPaneToLine(sym, topLineOf(out));  // рендер → симбиоз
   else syncFromOut();                                            // рендер → источник
 });
 new ResizeObserver(() => { updateGutter(); collectAnchors(); }).observe(src);
 
-function persist(){
-  const n = current(); if(!n) return;
-  n.body = src.value;
-  n.title = titleFrom(src.value);
-  n.updated = Date.now();
-  notes.sort((a,b)=> b.updated-a.updated);
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=> save(n), 300);   // дебаунс автосохранения
-  drawList();
+function showSaveStatus(){
+  const btn=$('#saveStatus');if(!btn)return;
+  btn.disabled=!saveError;btn.classList.toggle('bad',saveError);
+  btn.textContent=t(saveError?'saveFailed':pendingSaves.size||savingPromise?'saving':'saved');
 }
+async function flushSaves(){
+  clearTimeout(saveTimer);if(savingPromise)return savingPromise;
+  savingPromise=(async()=>{
+    try{
+      while(pendingSaves.size){
+        const [id,job]=pendingSaves.entries().next().value;
+        await writeTextFile(job.path,job.body,job.options);
+        if(pendingSaves.get(id)===job)pendingSaves.delete(id);
+      }saveError=false;return true;
+    }catch{saveError=true;return false;}
+  })();
+  showSaveStatus();const ok=await savingPromise;savingPromise=null;showSaveStatus();return ok;
+}
+function persist(){
+  const n=current();if(!n)return;
+  n.body=src.value;n.title=titleFrom(src.value);n.updated=Date.now();
+  notes.sort((a,b)=>b.updated-a.updated);
+  pendingSaves.set(n.id,{body:n.body,path:loc.p(`${n.id}.md`),options:{...loc.opt}});
+  clearTimeout(saveTimer);saveTimer=setTimeout(flushSaves,300);showSaveStatus();drawList();
+}
+$('#saveStatus').onclick=flushSaves;
+window.addEventListener('pagehide',()=>{if(isSymMode())symSync();void flushSaves();});
 
 async function newNote(){
   const n = { id: crypto.randomUUID(), title: t('newNote'),
@@ -734,10 +781,13 @@ async function newNote(){
 async function deleteCurrent(){
   const n = current(); if(!n) return;
   if(!confirm(t('confirmDel', { t: n.title }))) return;
+  if(isSymMode())symSync();
+  if(!await flushSaves())return;
+  pendingSaves.delete(n.id);
   await del(n.id);
   notes = notes.filter(x=>x.id!==n.id);
-  currentId = notes[0]?.id || null;
-  select(currentId);
+  currentId = null;
+  select(notes[0]?.id || null);
 }
 
 // Иконки тулбара — инлайн-SVG из набора Lucide (MIT, lucide.dev), тот же стиль,
@@ -868,7 +918,7 @@ function buildSyntax(){
 }
 
 function buildToolbar(){
-  toolbar.innerHTML = '';
+  setSafeHtml(toolbar, '');
   tbState = [];                                   // кнопки с подсветкой состояния — заново
   let empty = true;                               // ещё не добавили ни одной кнопки
   for(const it of buildSyntax()){
@@ -880,7 +930,7 @@ function buildToolbar(){
     const b = document.createElement('button');
     b.className = 'tb-btn';
     b.title = it.w ? `${it.g}  ·  ${it.w}` : it.g;  // в тултипе — и что делает, и синтаксис
-    if(it.ico && TBI[it.ico]) b.innerHTML = TBI[it.ico];
+    if(it.ico && TBI[it.ico]) setSafeHtml(b, TBI[it.ico]);
     else b.textContent = it.btn;
     // mousedown не отдаём кнопке: фокус и выделение остаются в редакторе
     // (и на мобилке не прячется клавиатура)
@@ -947,11 +997,11 @@ document.addEventListener('click', e => {
   document.querySelectorAll('.tb-group.open').forEach(g => g.classList.remove('open'));
 });
 function buildCheat(){
-  cheatTable.innerHTML = buildSyntax().map(it =>
+  setSafeHtml(cheatTable, buildSyntax().map(it =>
     it.head
       ? `<tr class="cheat-group"><td colspan="2">${escapeHtml(it.head)}</td></tr>`
       : `<tr><td class="k">${escapeHtml(it.w)}</td><td class="v">${escapeHtml(it.g)}</td></tr>`
-  ).join('');
+  ).join(''));
 }
 // --- вставка из тулбара: уважает выделение, ничего не затирает ---
 // Четыре режима кнопок (поле записи buildSyntax):
@@ -1164,6 +1214,7 @@ function createTable(){
 // текст, а не наш render.css; рендер-HTML туда нести незачем.
 let copyFlashTimer = null;
 async function copyNote(){
+  if(isSymMode())symSync();
   const n = current(); if(!n) return;
   const text = src.value;
 
@@ -1188,12 +1239,18 @@ async function copyNote(){
 
 // Тумблер «Документ» — чисто визуальный пресет рендера, состояние в localStorage
 const DOCMODE_KEY = 'notatnyk.docmode';
-function applyDocMode(on){
-  out.classList.toggle('doc-mode', on);
-  $('#docBtn').classList.toggle('active', on);
-  try{ localStorage.setItem(DOCMODE_KEY, on ? '1' : ''); }catch{}
-  collectAnchors();                     // геометрия блоков изменилась — якоря заново
+const PRESET_KEY='notatnyk.preset';
+let docPreset='note';
+function applyPreset(preset){
+  docPreset=['note','document','spec'].includes(preset)?preset:'note';
+  out.classList.toggle('doc-mode',docPreset==='document');out.classList.toggle('spec-mode',docPreset==='spec');
+  $('#docBtn').classList.toggle('active',docPreset!=='note');$('#docBtn').title=t('preset'+({note:'Note',document:'Document',spec:'Spec'}[docPreset]));
+  $('#docPreset').value=docPreset;
+  try{localStorage.setItem(PRESET_KEY,docPreset);localStorage.setItem(DOCMODE_KEY,docPreset==='document'?'1':'');}catch{}
+  collectAnchors();
 }
+function applyDocMode(on){applyPreset(on?'document':'note');}
+$('#docPreset').onchange=()=>{applyPreset($('#docPreset').value);saveConfig();};
 
 // ── Шрифт документа (меню «Aa») ─────────────────────────────────────────────
 // Системные кросс-ОС стеки: без бандлинга файлов (лёгкость), у всех — полная
@@ -1245,7 +1302,7 @@ function applyDocFont(){
 // Карточки шрифтов: каждая рисуется СВОИМ стеком — предпросмотр вместо слов
 function buildFontCards(){
   const box = $('#fontCards');
-  box.innerHTML = '';
+  setSafeHtml(box, '');
   for(const key in DOC_FONTS){
     const f = DOC_FONTS[key];
     const b = document.createElement('button');
@@ -1253,13 +1310,13 @@ function buildFontCards(){
     b.className = 'font-card';
     b.dataset.font = key;
     b.style.fontFamily = f.stack;
-    b.innerHTML = `<span class="fc-name">${escapeHtml(t(f.name))}</span>`
+    setSafeHtml(b, `<span class="fc-name">${escapeHtml(t(f.name))}</span>`
       + `<span class="fc-note">${escapeHtml(t(f.note))}</span>`
-      + `<span class="fc-sample">${escapeHtml(t('fontSample'))}</span>`;
+      + `<span class="fc-sample">${escapeHtml(t('fontSample'))}</span>`);
     b.onclick = ()=>{
       docFont = key;
       applyDocFont(); saveConfig();
-      if(!out.classList.contains('doc-mode')) applyDocMode(true); // показать эффект сразу
+      if(docPreset==='note') applyPreset('document');
     };
     box.appendChild(b);
   }
@@ -1267,7 +1324,7 @@ function buildFontCards(){
 }
 function openDocDlg(){
   $('#docDlg').hidden = false;
-  if(!out.classList.contains('doc-mode')) applyDocMode(true);   // предпросмотр — на живом рендере
+
 }
 
 // --- настройки языка / ключевых слов ---
@@ -1308,11 +1365,14 @@ async function chooseFolder(){
   let path;
   try{ path = await pickFolder(); }catch{ return; }
   if(!path) return;
+  if(isSymMode())symSync();
+  if(!await flushSaves())return;
   loc = customLoc(path);
   await saveConfig();
   query = ''; search.value = '';
   await loadAll(false);            // в выбранную папку пример не подсеваем
-  select(currentId);
+  const nextId=currentId;currentId=null;
+  select(nextId);
   reflectFolder();
 }
 function reflectFolder(){
@@ -1372,18 +1432,18 @@ function filterSlash(query){
   slashIdx = 0;
 }
 function renderSlash(){
-  if(!slashList.length){ slashEl.innerHTML = `<div class="slash-empty">${escapeHtml(t('slashEmpty'))}</div>`; return; }
+  if(!slashList.length){ setSafeHtml(slashEl, `<div class="slash-empty">${escapeHtml(t('slashEmpty'))}</div>`); return; }
   const box = document.createElement('div'); box.className = 'slash-list';
   slashList.forEach((it, i) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'slash-item' + (i === slashIdx ? ' on' : '');
-    b.innerHTML = `<span class="slash-key">${escapeHtml(it.label)}</span><span class="slash-desc">${escapeHtml(it.desc)}</span>`;
+    setSafeHtml(b, `<span class="slash-key">${escapeHtml(it.label)}</span><span class="slash-desc">${escapeHtml(it.desc)}</span>`);
     b.onmousedown = e => { e.preventDefault(); slashIdx = i; slashChoose(); };
     b.onmousemove = () => { if(slashIdx !== i){ slashIdx = i; paintSlashActive(); } };
     box.appendChild(b);
   });
-  slashEl.innerHTML = '';
+  setSafeHtml(slashEl, '');
   slashEl.appendChild(box);
   const on = box.children[slashIdx]; if(on) on.scrollIntoView({ block:'nearest' });
 }
@@ -1477,21 +1537,8 @@ function openSlashSym(query){
 }
 function updateSlashSym(){ const c = slashCtxSym(); c ? openSlashSym(c.query) : (slashMode === 'sym' && closeSlash()); }
 // Выделить (a..b) или поставить каретку (a==b) в блоке симбиоза по символьным смещениям.
-function symSetSel(line, a, b){
-  const block = sym.children[line]; if(!block) return;
-  const nodeAt = off => {
-    const w = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-    let rem = off, n;
-    while((n = w.nextNode())){ const L = (n.nodeValue || '').length; if(rem <= L) return { n, o: rem }; rem -= L; }
-    return null;
-  };
-  const s = window.getSelection(); if(!s) return;
-  const A = nodeAt(a), B = nodeAt(b), r = document.createRange();
-  if(A) r.setStart(A.n, A.o); else r.selectNodeContents(block);
-  if(B) r.setEnd(B.n, B.o);   else r.collapse(false);
-  s.removeAllRanges(); s.addRange(r);
-}
-// Спека вставки: тело + позиция каретки {cl:строка от вставки, off:смещение, sel:длина выделения}.
+function symSetSel(line,a,b){const at=symReadText().split('\n').slice(0,line).reduce((n,s)=>n+s.length+1,0);symController.setSelection(at+a,at+b);}
+
 function slashInsertSpec(it, tableText){
   if(it.prefix)    return { body: it.prefix, cl:0, off: it.prefix.length, sel:0 };
   if(it.hideBlock) return { body: '/*\n\n*/', cl:1, off:0, sel:0 };     // каретка на пустой средней строке
@@ -1508,7 +1555,7 @@ function symApplyInsert(ctx, spec){
   const parts = (head + spec.body + tail).split('\n');
   lines.splice(ctx.line, 1, ...parts);
   const text = lines.join('\n');
-  src.value = text; persist(); symPaint(text); paint();
+  symController.replace(text);
   const cLine = ctx.line + spec.cl;
   const cOff = (spec.cl === 0 ? head.length : 0) + spec.off;
   sym.focus();                                       // фокус ДО установки каретки (иначе выделение сбрасывается)
@@ -1527,7 +1574,7 @@ function chooseSlashSym(){
 // паттернов. Вставка — в активную панель (Исходник → примитивы тулбара; Симбиоз →
 // построчно). Позиция над клавиатурой держится через visualViewport.
 function insertPattern(it){
-  if(viewMode !== 'sym'){ src.focus(); runSlashSrc(it); return; }
+  if(!isSymMode()){ src.focus(); runSlashSrc(it); return; }
   const c = symCaret() || { line: 0, offset: 0 };
   if(it.table){ symTableCtx = { line:c.line, wsLen:c.offset, offset:c.offset }; openTableDlg(); return; }
   const at = it.prefix ? 0 : c.offset;             // построчные (##, -, > …) — в начало строки
@@ -1535,7 +1582,7 @@ function insertPattern(it){
 }
 function buildMToolbar(){
   const mt = $('#mtoolbar'); if(!mt) return;
-  mt.innerHTML = '';
+  setSafeHtml(mt, '');
   for(const it of slashItems()){
     if(it.hideBlock) continue;                     // скрытый блок — не для быстрой панели
     const b = document.createElement('button');
@@ -1552,7 +1599,7 @@ function placeMToolbar(){                           // держим панель
   mt.style.bottom = (vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0) + 'px';
 }
 function setEditing(on){
-  const narrow = window.matchMedia('(max-width:640px)').matches;
+  const narrow = window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
   document.body.classList.toggle('editing', on && narrow);
   if(on && narrow) placeMToolbar();
 }
@@ -1600,7 +1647,7 @@ for(const b of localeDlg.querySelectorAll('[data-lang]'))
 $('#folderBtn').onclick = chooseFolder;
 $('#newBtn').onclick = newNote;
 $('#delBtn').onclick = deleteCurrent;
-$('#docBtn').onclick = ()=> applyDocMode(!out.classList.contains('doc-mode'));
+$('#docBtn').onclick=()=>{applyPreset(({note:'document',document:'spec',spec:'note'})[docPreset]);saveConfig();};
 $('#copyBtn').onclick = copyNote;
 $('#fontBtn').onclick = openDocDlg;
 $('#outlineBtn').onclick = e => { e.stopPropagation(); toggleOutline(); };
@@ -1632,12 +1679,12 @@ document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
 (function initSplitter(){
   const divider = $('#divider'), editor = $('#editorpane');
   const KEY = 'notatnyk.split';
-  const isMobile = () => window.matchMedia('(max-width:640px)').matches;
+  const isMobile = () => window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
   const apply = f => { editor.style.flex = `0 0 ${(f*100).toFixed(2)}%`; };
   // На узком экране редактор — на весь экран: снимаем инлайновый flex десктоп-
   // разделителя (иначе в колоночной раскладке он становится ограничением ВЫСОТЫ ~50%).
   const saved = parseFloat(localStorage.getItem(KEY));
-  const mq = window.matchMedia('(max-width:640px)');
+  const mq = window.matchMedia(MOBILE_LAYOUT_QUERY);
   const syncSplit = () => {
     if(mq.matches) editor.style.flex = '';
     else if(saved > 0.15 && saved < 0.85) apply(saved);
@@ -1671,81 +1718,37 @@ document.querySelectorAll('#fontSizes .seg-btn').forEach(b => b.onclick = ()=>{
 // подсвеченный ИСХОДНИК (renderSourceLines), не вычисленный рендер, поэтому
 // спецсимволы не ломают виджеты (их нет). Инвариант: textContent строки == строка.
 const sym = $('#sym');
-let symComposing = false;     // IME-композиция (Android/iOS/CJK) — не перерисовываем
-let symTimer = null;
 
-// «Сырой» текст из холста: один top-level <div> = одна строка; &nbsp; → пробел.
-function symReadText(){
-  if(!sym.children.length) return (sym.textContent || '').replace(/ /g, ' ');
-  return [...sym.children].map(c => (c.textContent || '').replace(/ /g, ' ')).join('\n');
-}
-function symPaint(text){ sym.innerHTML = renderSourceLines(text); }
 
-// Курсор: {line — индекс блока, offset — символов до каретки в блоке}.
-function symCaret(){
-  const s = window.getSelection();
-  if(!s || !s.rangeCount) return null;
-  const range = s.getRangeAt(0);
-  if(!sym.contains(range.startContainer)) return null;
-  let block = range.startContainer;
-  while(block && block.parentNode !== sym) block = block.parentNode;
-  if(!block) return null;
-  const line = [...sym.children].indexOf(block);
-  if(line < 0) return null;
-  const pre = document.createRange();
-  pre.selectNodeContents(block);
-  pre.setEnd(range.startContainer, range.startOffset);
-  return { line, offset: pre.toString().length };
-}
-function symRestore(info){
-  if(!info) return;
-  const block = sym.children[info.line];
-  if(!block) return;
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-  let remaining = info.offset, node; const s = window.getSelection(); if(!s) return;
-  while((node = walker.nextNode())){
-    const len = (node.nodeValue || '').length;
-    if(remaining <= len){
-      const r = document.createRange(); r.setStart(node, remaining); r.collapse(true);
-      s.removeAllRanges(); s.addRange(r); return;
-    }
-    remaining -= len;
-  }
-  const r = document.createRange(); r.selectNodeContents(block); r.collapse(false);
-  s.removeAllRanges(); s.addRange(r);
-}
-
-// Синхронизация после правки: обновляем модель + рендер справа + Σ; во время
-// IME-композиции холст НЕ перерисовываем (иначе теряются символы на Android).
-function symSync(){
-  const text = symReadText();
-  src.value = text;
-  persist();
-  const caret = symComposing ? null : symCaret();
-  paint();                                   // правый рендер + футер Σ — вживую
-  if(!symComposing){ symPaint(text); symRestore(caret); }
-  if(slashOpen() && slashMode === 'sym') positionSlashSym();   // холст перерисован — репозиция меню
-}
-
-// синхроскролл: симбиоз ведёт → рендер следует (гейт activePane, без обратной петли)
-sym.addEventListener('mouseenter', ()=> activePane = 'sym');
-sym.addEventListener('touchstart', ()=> activePane = 'sym', { passive:true });
-sym.addEventListener('focus', ()=> activePane = 'sym');
-sym.addEventListener('scroll', ()=>{ if(activePane === 'sym') scrollPaneToLine(out, topLineOf(sym)); });
-sym.addEventListener('input', ()=>{ clearTimeout(symTimer); symTimer = setTimeout(symSync, 250); });
-// slash-меню «/» в симбиозе: детект сразу по вводу; навигация клавишами; закрытие
-sym.addEventListener('input', updateSlashSym);
-sym.addEventListener('keydown', e => {
-  if(!(slashOpen() && slashMode === 'sym')) return;
-  if(e.key === 'ArrowDown'){ e.preventDefault(); moveSlash(1); }
-  else if(e.key === 'ArrowUp'){ e.preventDefault(); moveSlash(-1); }
-  else if(e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); chooseSlashSym(); }
-  else if(e.key === 'Escape'){ e.preventDefault(); closeSlash(); }
+const symController = createSymEditor(sym, {
+  renderLines: text=>sanitizeHtml(renderSourceLines(text)),
+  onChange(text){ src.value=text; persist(); paint(); if(slashOpen() && slashMode==='sym') positionSlashSym(); },
 });
-sym.addEventListener('blur', ()=>{ clearTimeout(symTimer); symSync(); });
-sym.addEventListener('blur', ()=> setTimeout(()=>{ if(slashMode === 'sym') closeSlash(); }, 120));
-sym.addEventListener('compositionstart', ()=>{ symComposing = true; });
-sym.addEventListener('compositionend', ()=>{ symComposing = false; clearTimeout(symTimer); symSync(); });
+function symReadText(){ return symController.readText(); }
+function symPaint(text){
+  if(symController.readText()!==text) symController.load(text);
+  else symController.repaint();
+}
+function symCaret(){
+  const offset=symController.selection().start, lines=symReadText().split('\n');let acc=0;
+  for(let line=0;line<lines.length;line++){if(offset<=acc+lines[line].length)return {line,offset:offset-acc};acc+=lines[line].length+1;}
+  return {line:lines.length-1,offset:lines.at(-1).length};
+}
+function symRestore(info){if(info){const lines=symReadText().split('\n');symController.setSelection(lines.slice(0,info.line).reduce((n,s)=>n+s.length+1,0)+info.offset);}}
+function symSync(){ symController.commit(); }
+sym.addEventListener('mouseenter', ()=>activePane='sym');
+sym.addEventListener('touchstart', ()=>activePane='sym', {passive:true});
+sym.addEventListener('focus', ()=>activePane='sym');
+sym.addEventListener('scroll', ()=>{if(activePane==='sym')scrollPaneToLine(out,topLineOf(sym));});
+sym.addEventListener('input', updateSlashSym);
+sym.addEventListener('keydown',e=>{
+  if(!(slashOpen() && slashMode==='sym'))return;
+  if(e.key==='ArrowDown'){e.preventDefault();moveSlash(1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();moveSlash(-1);}
+  else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();chooseSlashSym();}
+  else if(e.key==='Escape'){e.preventDefault();closeSlash();}
+});
+sym.addEventListener('blur',()=>setTimeout(()=>{if(slashMode==='sym')closeSlash();},120));
 // Мобильная панель вставки: показ при фокусе редактора (src/sym), позиция над клавиатурой.
 // Здесь — уже ПОСЛЕ `const sym`, поэтому обращение к sym безопасно (без TDZ).
 [src, sym].forEach(el => {
@@ -1775,36 +1778,85 @@ sym.addEventListener('mousedown', e=>{
   if(lines[i] != null){
     lines[i] = lines[i].replace(/\[([ xX])\]/, (m,c)=> c.toLowerCase()==='x' ? '[ ]' : '[x]');
     src.value = lines.join('\n');
-    persist(); symPaint(src.value); paint();
+    symController.replace(src.value);
   }
 });
 
+// ── Diagnostics and offline templates ─────────────────────────────────────
+function showDiagnostics(items){
+  const box=$('#diagnostics'),list=$('#diagnosticsList');box.hidden=!items.length;
+  $('#diagnosticsSummary').textContent=t('diagnostics',{n:items.length});list.replaceChildren();
+  const sorted=[...items].sort((a,b)=>(a.severity==='error'?0:1)-(b.severity==='error'?0:1)||(a.line??0)-(b.line??0));
+  const seen=new Set();for(const d of sorted){
+    const key=d.code+':'+d.line;if(seen.has(key))continue;seen.add(key);
+    const li=document.createElement('li'),btn=document.createElement('button');btn.type='button';btn.className='diagnostic-item '+d.severity;
+    const label=t('diag_'+d.code);btn.textContent=t('diagnosticLine',{n:(d.line??0)+1})+' — '+(label==='diag_'+d.code?d.message:label);btn.title=d.message;
+    btn.onclick=()=>{const line=d.line??0;setView(isSymMode()?viewMode:'sym');const at=src.value.split('\n').slice(0,line).reduce((n,s)=>n+s.length+1,0);sym.focus();symController.setSelection(at);scrollPaneToLine(sym,line);box.open=false;};
+    li.append(btn);list.append(li);
+  }
+}
+const templateStore=createTemplateStore({
+  lang:()=>lang,keywords:()=>LOCALE,
+  read:async()=>await exists('templates.json',base)?readTextFile('templates.json',base):null,
+  write:async(next,previous)=>{if(previous)await writeTextFile('templates.backup.json',JSON.stringify(previous,null,2),base);await writeTextFile('templates.json',JSON.stringify(next,null,2),base);},
+});
+let templateContext=null;
+function captureTemplateContext(){
+  if(isSymMode()){symSync();templateContext={note:currentId,mode:viewMode,...symController.selection()};}
+  else templateContext={note:currentId,mode:viewMode,start:viewMode==='source'?src.selectionStart:src.value.length,end:viewMode==='source'?src.selectionEnd:src.value.length};
+  return src.value.slice(templateContext.start,templateContext.end)||src.value;
+}
+function restoreTemplateFocus(){
+  if(!templateContext || templateContext.note!==currentId)return;
+  if(isSymMode(templateContext.mode)){sym.focus();symController.setSelection(templateContext.start,templateContext.end);}
+  else if(templateContext.mode==='source'){src.focus();src.setSelectionRange(templateContext.start,templateContext.end);}
+}
+const templateUI=createTemplateUI({store:templateStore,t,preview:(el,text)=>setSafeHtml(el,wrapParamRuns(render(text).html)),onClose:restoreTemplateFocus,
+  onInsert(body){
+    if(!templateContext || templateContext.note!==currentId)return;
+    let {start,end,mode}=templateContext;const original=src.value;
+    const before=start>0&&original[start-1]!=='\n'?'\n':'';const after=end<original.length&&original[end]!=='\n'?'\n':'';
+    const inserted=before+body+after,text=original.slice(0,start)+inserted+original.slice(end),range={start:start+before.length,end:start+before.length+body.length};
+    if(isSymMode(mode)){setView(mode);symController.replace(text,range);sym.focus();symController.setSelection(range.start,range.end);}
+    else{setView('source');replaceRange(start,end,inserted);src.setSelectionRange(range.start,range.end);}
+  },
+});
+for(const [id,save]of [['templatesBtn',false],['saveTemplateBtn',true]]){
+  $('#'+id).addEventListener('mousedown',e=>{e.preventDefault();captureTemplateContext();});
+  $('#'+id).onclick=()=>{const text=captureTemplateContext();templateUI.show(save?text:null);};
+}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.code==='Space'){e.preventDefault();captureTemplateContext();templateUI.show();}});
 // ── Переключатель вида: Источник ↔ Симбиоз ↔ Рендер ─────────────────────────
 // Всё показ/скрытие панелей — через data-view на #split (CSS). Десктоп: источник
 // и симбиоз показывают выбранный редактор СЛЕВА + рендер справа; «Рендер» — только
 // рендер. Телефон (@media ≤640): показывается ТОЛЬКО одна панель, без разделения
 // экрана (симбиоз по умолчанию), см. css/responsive.css.
-let viewMode = 'source';                      // source | sym | view
+let viewMode = 'source';
+function isSymMode(mode=viewMode){return mode==='sym'||mode==='clean';}                      // source | sym | view
 // Только применить панель (без сохранения и без коммита симбиоза) — общий низ
 // для setView и select() (при выборе заметки режим уже загружен, коммитить нечего).
 function applyView(mode){
   viewMode = mode;
   split.dataset.view = mode;                   // CSS решает, что видно
+  $('#hideMarkers').checked=mode==='clean';
+  sym.classList.toggle('clean-mode',mode==='clean');
   const seg = { source:'segSplit', sym:'segSym', view:'segView' };
-  for(const m in seg) $('#'+seg[m]).classList.toggle('active', m === mode);
+  for(const m in seg) $('#'+seg[m]).classList.toggle('active', m===mode || (m==='sym' && mode==='clean'));
 }
 // Пользователь переключил панель: коммитим правки симбиоза, применяем, ЗАПОМИНАЕМ per-note.
 function setView(mode){
   closeSlash();                                  // при смене панели slash-меню не тащим
   // уходя из симбиоза — забрать свежий текст (без ожидания дебаунса)
-  if(viewMode === 'sym' && mode !== 'sym'){ clearTimeout(symTimer); src.value = symReadText(); persist(); }
+  if(isSymMode() && mode!==viewMode){ symSync(); }
   applyView(mode);
   saveView();                                    // per-note память режима просмотра
-  if(mode === 'sym'){ symPaint(src.value); sym.focus(); }
+  if(isSymMode(mode)){symPaint(src.value);sym.focus();}
+  if(mode==='view'){setEditing(false);src.blur();sym.blur();}
   paint();
 }
 $('#segSplit').onclick = ()=> setView('source');
-$('#segSym').onclick   = ()=> setView('sym');
+$('#segSym').onclick=()=>setView($('#hideMarkers').checked?'clean':'sym');
+$('#hideMarkers').onchange=()=>setView($('#hideMarkers').checked?'clean':'sym');
 $('#segView').onclick  = ()=> setView('view');
 function toggleTheme(){
   const el = document.documentElement;
@@ -1842,6 +1894,13 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape' && sidebarEl.c
   on('winMin',   () => win.minimize());
   on('winMax',   () => win.toggleMaximize());
   on('winClose', () => win.close());
+})();
+
+// Close only after pending writes have completed; no surprise discard prompt.
+(function protectNativeClose(){
+  const api=window.__TAURI__?.window;if(!api?.getCurrentWindow)return;
+  const win=api.getCurrentWindow();let allowed=false;
+  win.onCloseRequested(async e=>{if(allowed)return;e.preventDefault();if(isSymMode())symSync();if(await flushSaves()){allowed=true;await win.close();}}).catch(()=>{});
 })();
 
 // --- seed sample ---
@@ -1902,10 +1961,11 @@ async function seed(){
   try{
     await loadConfig();               // читает lang + ручные правки ключевых слов
     applyLang(lang, kwOverrides);     // язык интерфейса + движок + тулбар/шпаргалка
-    try{ if(localStorage.getItem(DOCMODE_KEY) === '1') applyDocMode(true); }catch{}
+    try{applyPreset(localStorage.getItem(PRESET_KEY)||(docPreset!=='note'?docPreset:localStorage.getItem(DOCMODE_KEY)==='1'?'document':'note'));}catch{applyPreset(docPreset);}
     await loadAll();
-    select(currentId);   // применяет per-note режим просмотра (или дефолт по ширине экрана)
+    select(currentId);
+    showSaveStatus();document.body.dataset.ready='true';   // применяет per-note режим просмотра (или дефолт по ширине экрана)
   }catch(e){
-    out.innerHTML = `<div class="r-callout">⚠️ ${t('initError')}: ${e}</div>`;
+    setSafeHtml(out, `<div class="r-callout">⚠️ ${t('initError')}: ${e}</div>`);
   }
 })();

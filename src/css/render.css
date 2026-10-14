@@ -190,3 +190,14 @@ svg.r-dimbox{display:block;width:100%;max-width:240px;height:auto;margin:0 auto;
 .r-hidden-body{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12px;
   color:var(--formula);line-height:1.6;padding:8px 12px;border:1px dashed var(--line-2);
   border-top:0;border-radius:0 0 8px 8px;white-space:pre-wrap;word-break:break-word;}
+
+/* Specification preset: readable production passport, using local tokens. */
+.rendered.spec-mode{font-family:var(--doc-font);font-size:var(--doc-size);line-height:1.6;}
+.spec-mode .r-h1{font-size:1.4em;color:var(--ink);border-bottom:2px solid var(--check);padding-bottom:8px;margin-bottom:10px;}
+.spec-mode .r-h2{font-size:1.1em;color:var(--ink);font-weight:800;letter-spacing:.02em;}
+.spec-mode .r-h3{font-size:1em;color:var(--ink-soft);}
+.spec-mode .r-p,.spec-mode .r-li,.spec-mode .spec-param-list>div{font-size:1em;}
+.spec-mode .r-callout{border:0;border-left:3px solid var(--callout-tx);border-radius:0;padding:7px 10px;margin:8px 0;}
+.spec-mode .r-callout.strong{border-left-color:var(--danger-tx);}
+.spec-mode .r-total{font-size:1.05em;}
+.price-sum,.price-other,.calc-res,.per-unit,.r-total,.counter,.footersum,.r-sec-sum{font-variant-numeric:tabular-nums;}

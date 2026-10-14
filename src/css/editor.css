@@ -29,16 +29,16 @@
 .sym .r-total b{font-weight:800;}
 .sym .r-var{color:var(--ink);}
 .sym .r-var .var-formula{color:var(--formula);}
-.sym .r-check{display:flex;align-items:baseline;gap:7px;}
-.sym .r-check .box{flex:none;width:17px;height:17px;align-self:center;border:2px solid var(--check);
+.sym .r-check{display:block;}
+.sym .r-check .box{flex:none;width:17px;height:17px;vertical-align:-.2em;margin-right:7px;border:2px solid var(--check);
   border-radius:5px;display:inline-grid;place-items:center;color:#fff;cursor:pointer;}
 .sym .r-check .box svg{width:11px;height:11px;stroke-width:3;}
 .sym .r-check.done .box{background:var(--check);}
 .sym .r-check.done .txt{color:var(--done);}
-.sym .r-callout{display:flex;gap:7px;align-items:baseline;padding:4px 9px;border-radius:7px;margin:2px 0;
+.sym .r-callout{display:block;padding:4px 9px;border-radius:7px;margin:2px 0;
   background:var(--callout-bg);border:1px solid var(--callout-line);}
 .sym .r-callout.strong{background:var(--danger-bg);border-color:var(--danger-line);}
-.sym .r-callout-ico{align-self:center;}
+.sym .r-callout-ico{display:inline-block;vertical-align:-.2em;margin-right:7px;}
 .sym .r-callout-ico svg{display:block;width:14px;height:14px;}
 .sym .ed-rule{color:var(--formula);border-bottom:1px solid var(--line);padding-bottom:1px;}
 .sym .ed-rule.heavy{border-bottom:2px solid var(--line-2);}
@@ -54,3 +54,8 @@
 .sym code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.88em;
   background:var(--code-bg);color:var(--code-tx);border:1px solid var(--code-line);
   border-radius:4px;padding:0 .35em;}
+
+/* Decorative markers remain in textContent and the saved source. */
+.sym.clean-mode .ed-syn{display:none;}
+.sym.clean-mode .ed-hidden .ed-syn,.sym.clean-mode .r-var .ed-syn{display:inline;}
+.sym .sym-active{background:var(--paper-2);border-radius:4px;}

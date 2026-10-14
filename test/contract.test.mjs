@@ -21,6 +21,7 @@ for (const c of cases) {
     const { html, stats, diagnostics } = render(c.source, { mode: c.mode === 'export' ? 'export' : undefined });
     const e = c.expect;
 
+    if (e.comparisonTotal != null) assert.ok(near(stats.comparisonTotal, e.comparisonTotal), `comparisonTotal: ${stats.comparisonTotal} !~ ${e.comparisonTotal}`);
     if (e.total != null) assert.ok(near(stats.total, e.total), `total: ${stats.total} !~ ${e.total}`);
     if (e.declared != null) assert.ok(near(stats.declared, e.declared), `declared: ${stats.declared} !~ ${e.declared}`);
     if (e.checksTotal != null) assert.equal(stats.checksTotal, e.checksTotal);

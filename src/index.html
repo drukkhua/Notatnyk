@@ -89,6 +89,17 @@
         </div>
       </header>
 
+      <div class="editor-tools">
+        <button id="templatesBtn" class="tb-btn" data-i18n="templates">Шаблоны</button>
+        <button id="saveTemplateBtn" class="tb-btn" data-i18n="saveTemplate">Сохранить как шаблон</button>
+        <label class="marker-toggle"><input id="hideMarkers" type="checkbox"><span data-i18n="hideMarkers">Без маркеров</span></label>
+        <button id="saveStatus" class="save-status" type="button" aria-live="polite" disabled></button>
+      </div>
+      <details id="diagnostics" class="diagnostics" hidden>
+        <summary id="diagnosticsSummary"></summary>
+        <ul id="diagnosticsList"></ul>
+      </details>
+
       <div class="split" id="split" data-view="source">
         <section class="pane editorpane" id="editorpane">
           <div id="toolbar" class="toolbar"></div>
@@ -147,6 +158,9 @@
           <button id="docDlgClose" class="ghost" data-i18n-title="close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         </div>
         <div class="loc-form">
+          <label class="preset-picker"><span data-i18n="presetLabel">Оформление</span>
+            <select id="docPreset"><option value="note" data-i18n="presetNote">Заметка</option><option value="document" data-i18n="presetDocument">Документ</option><option value="spec" data-i18n="presetSpec">Т.З.</option></select>
+          </label>
           <div id="fontCards" class="font-cards"></div>
           <label class="font-size-row"><span data-i18n="fontSizeLbl">Размер текста</span>
             <span class="seg" id="fontSizes">

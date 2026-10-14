@@ -15,7 +15,7 @@ export function escAttr(s){
 // Версия синтаксиса ТЗ (грамматика render()/inline()). Увеличивать при любом изменении
 // разбора; должна совпадать с BitrixUI (src/lib/specEngine.ts) и с contract-fixtures
 // (test/spec-fixtures.json) — иначе порты незаметно разойдутся.
-export const SPEC_SYNTAX_VERSION = '1.2.1';
+export const SPEC_SYNTAX_VERSION = '1.2.2';
 
 // Иконки — инлайн-SVG из набора Lucide (MIT, lucide.dev). Без зависимостей:
 // вшиты только нужные пути (~0.3 КБ каждая), красятся через currentColor.
@@ -94,7 +94,7 @@ function buildPatterns(){
   const unit = escRe(LOCALE.unit || 'шт');
   // «Итого» и «Разом» — постоянные RU/UK-алиасы независимо от языка интерфейса.
   // Пользовательские/EN-настройки LOCALE.total продолжают работать третьим вариантом.
-  const tot = `(?:${[...new Set([LOCALE.total || 'Итого', 'Итого', 'Разом'])]
+  const tot = `(?:${[...new Set([LOCALE.total || 'Итого', 'Итого', 'Ітого', 'Разом'])]
     .map(x => escRe(String(x).trim())).join('|')})`;
   const uSfx = `(\\.?\\s*\\/\\s*${unit}\\.?)`;                 // «/шт», «./шт.»
   // Цена «в Σ»: перед числом может стоять «=» ИЛИ «:» — оба дают тот же результат
@@ -109,6 +109,7 @@ function buildPatterns(){
   RE.totalLine = new RegExp(`^(${tot})${NL}\\s*(:?)\\s*(.*)$`, 'i');
   // Общий итог сверяет уже закрытые секции, а не открывает ещё одну пустую.
   RE.grandTotalLine = /^(Итого\s+(?:общее|общ\.)|Общее\s+итого|Общий\s+итог|Общ\.\s+итог|Всего|Разом\s+(?:загалом|заг\.)|Загалом|Grand\s+total)(?=\s|:|$)\s*(:?)\s*(.*)$/i;
+  RE.totalMoney = new RegExp(`^\\s*(\\d[\\d\\s]*(?:[.,]\\d+)?)(?:\\s*${cur}${NL}(?!\\s*/)|\\s*$)`, 'i');
   RE.posPrice  = new RegExp(`(?<!\\\\)[=:]\\s*[\\d][\\d\\s]*(?:[.,]\\d+)?\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})`, 'gi');
   RE.posCalc   = new RegExp(`=\\s*${cur}(?!\\.?\\s*\\/\\s*${unit})${NL}`, 'gi');
   RE.varRef    = new RegExp(`([=:]\\s*)?\\[([^\\]]+)\\](\\s*${cur}${uSfx}?${NL})?`, 'gi');
@@ -329,7 +330,7 @@ function qtyDiagnosticMessage(code, info){
 // через terminalQuantity, а не через sum).
 export function inline(text, opts){
   const context = (opts && opts.context) || 'body';
-  let sum = 0, terminalQuantity = null, qtyDiagnostic = null, qtyChunk = null;
+  let sum = 0, countedAmounts = 0, terminalQuantity = null, qtyDiagnostic = null, qtyChunk = null;
 
   // Калькулятор величин — выполняется РАНЬШЕ esc()/цен/calc() (план §7): иначе
   // «3720 грн» превратится в HTML цены раньше вычисления, а «2» из «м2» — в начало
@@ -344,8 +345,10 @@ export function inline(text, opts){
         terminalQuantity = res.value;
         const isCurrency = res.value.kind === 'quantity'
           && res.value.unitKey === normalizeUnitKey(LOCALE.currency);
-        if(isCurrency && context === 'body')
+        if(isCurrency && context === 'body'){
+          countedAmounts++;
           sum += Math.round((res.value.value + Number.EPSILON) * 100) / 100;
+        }
         const numStr = formatQuantityNumber(res.value.value, isCurrency);
         const unitTail = res.value.kind === 'quantity' ? ' ' + esc(res.value.unitRaw) : '';
         const resultClass = isCurrency ? 'price-sum' : 'calc-res';
@@ -394,7 +397,7 @@ export function inline(text, opts){
     // eq (группа 2) непусто, только если перед числом реально был "=" или ":".
     // Показываем ровно тот символ, что ввёл автор (":" остаётся ":", "=" — "=").
     if(eq){
-      sum += Math.round((v + Number.EPSILON) * 100) / 100;
+      countedAmounts++; sum += Math.round((v + Number.EPSILON) * 100) / 100;
       const op = eq.trim() || '=';
       return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
     }
@@ -424,7 +427,7 @@ export function inline(text, opts){
       // "грн/шт" — цена за штуку: показываем результат, но НЕ суммируем в Σ
       if(unit) return (EXPORT ? '' : formula + eq)
                      + `<span class="price-other">${fmtNum(r)} ${C}${unit}</span>`;
-      sum += Math.round((r + Number.EPSILON) * 100) / 100;
+      countedAmounts++; sum += Math.round((r + Number.EPSILON) * 100) / 100;
       // EXPORT: формула вырезана по построению — клиент видит «= 17 250 грн»
       if(EXPORT) return `${eqExp}<span class="price-sum">${fmtNum(r)} ${C}</span>`;
       return `${formula}${eq}<span class="price-sum">${fmtNum(r)} ${C}</span>`;
@@ -455,7 +458,7 @@ export function inline(text, opts){
     if(grn){
       if(unit) return `<span class="price-other">${fmtNum(v)} ${C}${unit}</span>`;
       if(eq){
-        sum += Math.round((v + Number.EPSILON) * 100) / 100;
+        countedAmounts++; sum += Math.round((v + Number.EPSILON) * 100) / 100;
         const op = eq.trim() || '=';
         return `<span class="calc-eq">${op}</span> <span class="price-sum">${fmtNum(v)} ${C}</span>`;
       }
@@ -519,7 +522,7 @@ export function inline(text, opts){
 
   if(qtyChunk != null) s = s.replace('\x00Q\x00', qtyChunk);
 
-  return { html: s, sum, terminalQuantity, qtyDiagnostic };
+  return { html: s, sum, countedAmounts, terminalQuantity, qtyDiagnostic };
 }
 
 // Текст заголовка без инлайн-разметки — для свёрнутой шапки секции и ключа фолда.
@@ -576,7 +579,8 @@ export function render(text, opts){
   const blocks = [];                           // [{html, line, kind, level, sum, …}]
   let total = 0, checksTotal = 0, checksDone = 0, positions = 0;
   let sectionSum = 0;                          // сумма =-цен текущей секции (до ближайшего «Итого»)
-  const add = v => { total += v; sectionSum += v; };
+  let declaredFallback = 0, sectionHasAmounts = false;
+  const add = (v, counted=false) => { total += v; sectionSum += v; sectionHasAmounts ||= counted; };
   const sections = [];                         // [{declared, sum, line}] — по одному на строку «Итого»
   let grandTotal = null;
   // Компактная диагностика готовности (см. docs/print-spec-parser-render-audit.md, п.4):
@@ -694,7 +698,7 @@ export function render(text, opts){
           const cells = splitTableRow(rowLine.slice(1, -1));
           const cellTag = ri === 0 ? 'th' : 'td';
           tb += ri === 0 ? '<tr class="r-tr-head">' : '<tr>';
-          for(const c of cells){ const r = inlineAt(c); add(r.sum); tsum += r.sum; tb += `<${cellTag}>${r.html}</${cellTag}>`; }
+          for(const c of cells){ const r = inlineAt(c); add(r.sum, r.countedAmounts > 0); tsum += r.sum; tb += `<${cellTag}>${r.html}</${cellTag}>`; }
           tb += '</tr>';
         });
         emit(tb + '</table>', 'table', { rows: Math.max(0, rows.length - 1), sum: tsum });
@@ -775,14 +779,14 @@ export function render(text, opts){
       // не валидное объявление — падаем в обычную обработку ниже
     }
     if(m = t.match(/^(#{1,3})\s+(.*)$/)){
-      const r = inlineAt(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum, r.countedAmounts > 0);
       emit(`<div class="r-h${m[1].length}">${r.html}</div>`, `h${m[1].length}`,
         { level: m[1].length, title: stripInline(m[2]), titleHtml: r.html, sum: r.sum }); continue;
     }
     if(m = t.match(/^\[([ xX])\]\s*(.*)$/)){
       const done = m[1].toLowerCase() === 'x';
       checksTotal++; if(done) checksDone++;
-      const r = inlineAt(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum, r.countedAmounts > 0);
       const idx = checkLineMap.length; checkLineMap.push(lineIdx);
       const label = m[2].trim();
       if(/:$/.test(label) && label.replace(/:$/, '').trim() === '')
@@ -796,7 +800,7 @@ export function render(text, opts){
       continue;
     }
     if(m = t.match(/^(!!?)\s+(.*)$/)){
-      const r = inlineAt(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum, r.countedAmounts > 0);
       const strong = m[1] === '!!';
       emit(`<div class="r-callout${strong?' strong':''}">`
             + `<span class="r-callout-ico">${strong?ICO.danger:ICO.warn}</span>`
@@ -835,11 +839,11 @@ export function render(text, opts){
       const tqIsCurrency = tq && tq.kind === 'quantity' && tq.unitKey === normalizeUnitKey(LOCALE.currency);
       // Дробная часть («10,50»/«10.50») тоже входит в сумму — иначе «Итого: 10,50 грн»
       // читалось бы как «10» и давало ложное расхождение с суммой позиций/сделки.
-      const dm = rest.match(/\d[\d\s]*(?:[.,]\d+)?/);
-      const declaredHere = tqIsCurrency ? tq.value : (dm ? parseMoney(dm[0]) : null);
+      const dm = rest.match(RE.totalMoney);
+      const declaredHere = tqIsCurrency ? tq.value : (dm ? parseMoney(dm[1]) : null);
       const sec = Math.round(sectionSum * 100) / 100;
       let fb;
-      if(declaredHere != null){
+      if(declaredHere != null && sectionHasAmounts){
         const diff = Math.round((sec - declaredHere) * 100) / 100;
         fb = diff === 0
           ? '<span class="r-total-ok">✓</span>'
@@ -847,6 +851,8 @@ export function render(text, opts){
         if(diff !== 0)
           diagnostics.push({ code: 'local_total_mismatch', severity: 'warning', line: curLine,
             message: `Сумма позиций секции ${fmtNum(sec)} ${LOCALE.currency} не совпадает с «${LOCALE.total}: ${fmtNum(declaredHere)} ${LOCALE.currency}»` });
+      }else if(declaredHere != null){
+        declaredFallback += declaredHere; fb = "";
       }else{
         fb = `<span class="r-total-ok">Σ ${LOCALE.section}: ${fmtNum(sec)} ${LOCALE.currency}</span>`;
       }
@@ -858,7 +864,7 @@ export function render(text, opts){
       emit(`<div class="r-total">${parts.join(' ')}</div>`, 'total', { declared: declaredHere });
       sections.push({ declared: declaredHere, sum: sec, line: curLine });
       lastTotal = effTotal;                     // для [кільк.] на следующих строках
-      sectionSum = 0;                           // начинаем новую секцию
+      sectionSum = 0; sectionHasAmounts = false; // начинаем новую секцию
       continue;
     }
     // Плоская нумерация: "1.", "1.1", "1.2.", "2.1.3" — метка не вложенность, просто
@@ -867,7 +873,7 @@ export function render(text, opts){
     // Исключение: «50 шт + 50 шт =» и т.п. — это величина, а не пункт нумерации;
     // её ведущее число — первый операнд формулы, а не подпись раздела.
     if((m = t.match(/^(\d+(?:\.\d+)*\.?)\s+(.+)$/)) && !looksLikeFormulaNotLabel(t)){
-      const r = inlineAt(m[2]); add(r.sum);
+      const r = inlineAt(m[2]); add(r.sum, r.countedAmounts > 0);
       const nc = hasDimboxWithText(r.html) ? 'r-num r-num-hd' : 'r-num';
       emit(`<div class="${nc}">${m[1]} ${r.html}</div>`, 'num', { sum: r.sum }); continue;
     }
@@ -879,17 +885,17 @@ export function render(text, opts){
       if(p && Boolean(p[1]) === Boolean(p[4])){
         const lab = inlineAt(p[2]);
         const val = inlineAt(p[3]);
-        add(lab.sum + val.sum);
+        add(lab.sum + val.sum, lab.countedAmounts + val.countedAmounts > 0);
         const strong = p[1] ? ' strong' : '';
         emit(`<div class="r-li r-param${strong}"><span class="r-param-label">${lab.html}</span>`
            + `<span class="r-param-value">${val.html}</span></div>`, 'param', { sum: lab.sum + val.sum });
         continue;
       }
-      const r = inlineAt(m[1]); add(r.sum);
+      const r = inlineAt(m[1]); add(r.sum, r.countedAmounts > 0);
       const lc = hasDimboxWithText(r.html) ? 'r-li r-li-hd' : 'r-li';
       emit(`<div class="${lc}">${r.html}</div>`, 'li', { sum: r.sum }); continue;
     }
-    const r = inlineAt(t); add(r.sum);
+    const r = inlineAt(t); add(r.sum, r.countedAmounts > 0);
     const ph = perUnitExpand(r.html, lastTotal);
     // обычный текст — без маркера списка; [кільк.] раскрывается по ближайшему «Итого»
     const pc = hasDimboxWithText(ph) ? 'r-p r-p-hd' : 'r-p';
@@ -959,7 +965,7 @@ export function render(text, opts){
   return {
     html,
     blocks,
-    stats: { total, checksTotal, checksDone, positions, declared, sections, grandTotal, pay },
+    stats: { total, comparisonTotal: Math.round((total + declaredFallback)*100)/100, checksTotal, checksDone, positions, declared, sections, grandTotal, pay },
     checkLineMap,
     diagnostics,
     fmt
@@ -1148,5 +1154,11 @@ export function renderSourceLines(text){
 
     out += `<div ${dl} class="ed-line r-p">${inlineSource(t)}</div>`;
   }
-  return out;
+  // Decoration must preserve the exact source, including indentation/trailing
+  // spaces: toggling modes or saving a template cannot rewrite the user's text.
+  return out.replace(/<div data-line="(\d+)"([^>]*)>(.*?)<\/div>/gs, (html,i,attrs,body)=>{
+    const raw=lines[Number(i)],lead=raw.match(/^[ \t]*/)[0];
+    const tail=raw.trim()?raw.match(/[ \t]*$/)[0]:'';
+    return `<div data-line="${i}"${attrs}>${esc(lead)}${body}${esc(tail)}</div>`;
+  });
 }
